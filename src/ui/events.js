@@ -170,7 +170,7 @@ function baseFilenameFromUrl(url) {
 }
 
 function hasFileSystemAccessApi() {
-  return typeof window !== "undefined" && window.isSecureContext && typeof window.showDirectoryPicker === "function";
+  return typeof window !== "undefined" && typeof window.showDirectoryPicker === "function";
 }
 
 function revealManualFallback() {
@@ -601,6 +601,12 @@ async function pickAndLoadDirectoryLive() {
     return;
   }
 
+  if (!window.isSecureContext) {
+    revealManualFallback();
+    alert("Live-Bearbeitung benötigt einen sicheren Kontext (https oder localhost). Bitte per https/localhost öffnen oder den Fallback nutzen.");
+    return;
+  }
+
   try {
     let directoryHandle;
     try {
@@ -647,10 +653,13 @@ export function wireUiEvents() {
   const pickFolderBtn = $("pickFolderBtn");
 
   if (pickFolderBtn) {
-    pickFolderBtn.disabled = !hasFileSystemAccessApi();
-    pickFolderBtn.title = hasFileSystemAccessApi()
+    const supportsLive = hasFileSystemAccessApi();
+    pickFolderBtn.title = supportsLive
       ? ""
       : "Dieser Browser unterstützt keinen Ordnerzugriff mit Schreibrechten. Nutze die Fallback-Alternative darunter.";
+
+    if (!supportsLive) revealManualFallback();
+
     pickFolderBtn.addEventListener("click", async () => {
       await pickAndLoadDirectoryLive();
     });
