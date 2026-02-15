@@ -8,7 +8,7 @@ export const state = {
   zip: null,
   zipIndex: new Map(),
   zipObjectUrls: new Map(),
-  localImageUrls: new Map(),
+  localImages: new Map(), // fileBase -> { fileName, blob, url }
 
   // View / workflow
   view: "config", // "config" | "search"
