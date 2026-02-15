@@ -8,10 +8,10 @@ export function clearZipObjectUrls() {
 }
 
 export function clearLocalImageObjectUrls() {
-  for (const url of state.localImageUrls.values()) {
-    try { URL.revokeObjectURL(url); } catch {}
+  for (const entry of state.localImages.values()) {
+    try { URL.revokeObjectURL(entry.url); } catch {}
   }
-  state.localImageUrls = new Map();
+  state.localImages = new Map();
 }
 
 function imageBaseName(filename) {
@@ -22,25 +22,31 @@ function imageBaseName(filename) {
 export function registerLocalImage(file) {
   if (!file) return null;
 
+  const ext = String(file.name || "").split(".").pop() || "png";
   const base = imageBaseName(file.name) || `bild_${Date.now()}`;
   let candidate = base;
   let idx = 2;
 
-  while (state.localImageUrls.has(candidate)) {
+  while (state.localImages.has(candidate) || state.zipIndex.has(candidate)) {
     candidate = `${base}_${idx}`;
     idx += 1;
   }
 
   const url = URL.createObjectURL(file);
-  state.localImageUrls.set(candidate, url);
+  state.localImages.set(candidate, {
+    fileName: `${candidate}.${ext}`,
+    blob: file,
+    url,
+  });
   return candidate;
 }
 
 export function removeLocalImage(fileBase) {
-  if (!state.localImageUrls.has(fileBase)) return;
-  const url = state.localImageUrls.get(fileBase);
+  if (!state.localImages.has(fileBase)) return;
+  const entry = state.localImages.get(fileBase);
+  const url = entry?.url;
   try { URL.revokeObjectURL(url); } catch {}
-  state.localImageUrls.delete(fileBase);
+  state.localImages.delete(fileBase);
 }
 
 function requireJSZip() {
@@ -90,8 +96,8 @@ export async function loadZipFile(file) {
 }
 
 export async function getImageUrl(fileBase) {
-  if (state.localImageUrls.has(fileBase)) {
-    return state.localImageUrls.get(fileBase);
+  if (state.localImages.has(fileBase)) {
+    return state.localImages.get(fileBase).url;
   }
 
   if (!state.zip || !state.zipIndex.has(fileBase)) return null;
@@ -102,4 +108,28 @@ export async function getImageUrl(fileBase) {
   const url = URL.createObjectURL(blob);
   state.zipObjectUrls.set(fileBase, url);
   return url;
+}
+
+export async function buildImagesZipBlob() {
+  const JSZip = requireJSZip();
+  const out = new JSZip();
+
+  if (state.zip) {
+    const copyTasks = [];
+    state.zip.forEach((path, entry) => {
+      if (entry.dir) return;
+      copyTasks.push(
+        entry.async("arraybuffer").then((buf) => {
+          out.file(path, buf);
+        })
+      );
+    });
+    await Promise.all(copyTasks);
+  }
+
+  for (const local of state.localImages.values()) {
+    out.file(local.fileName, local.blob);
+  }
+
+  return out.generateAsync({ type: "blob" });
 }

@@ -107,7 +107,8 @@ function createImageEditor(question) {
       del.textContent = "Entfernen";
       del.addEventListener("click", () => {
         const removed = question.imageFiles.splice(idx, 1)[0];
-        removeLocalImage(removed);
+        const stillUsed = state.questionsAll.some((q) => (q.imageFiles || []).includes(removed));
+        if (!stillUsed) removeLocalImage(removed);
         state.dirty = true;
         renderAll();
       });

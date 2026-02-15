@@ -1,7 +1,7 @@
 import { $, toast } from "../utils.js";
 import { state, resetEditorState } from "../state.js";
 import { loadJsonFiles, syncQuestionToSource, buildDatasetExports } from "../data/loaders.js";
-import { clearLocalImageObjectUrls, loadZipFile } from "../data/zipImages.js";
+import { buildImagesZipBlob, clearLocalImageObjectUrls, loadZipFile } from "../data/zipImages.js";
 import { filterByExams, filterByImageMode, searchQuestions } from "../quiz/filters.js";
 import { renderAll, updateExamLists } from "./render.js";
 
@@ -43,8 +43,16 @@ function baseFilenameFromUrl(url) {
   return seg || "export.json";
 }
 
+function hasFileSystemAccessApi() {
+  return typeof window.showDirectoryPicker === "function";
+}
+
 function downloadJson(payload, filename) {
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  downloadBlob(blob, filename);
+}
+
+function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -55,96 +63,208 @@ function downloadJson(payload, filename) {
   URL.revokeObjectURL(url);
 }
 
+async function writeBlobToHandle(fileHandle, blob) {
+  const writable = await fileHandle.createWritable();
+  await writable.write(blob);
+  await writable.close();
+}
+
 function syncAllQuestions() {
   for (const q of state.questionsAll) syncQuestionToSource(q);
 }
 
-function saveAsOriginalDownload() {
+async function saveAsOriginalDownload() {
   syncAllQuestions();
   const exports = buildDatasetExports();
+  const zipBlob = await buildImagesZipBlob();
+
+  if (state.activeDataset?.directoryHandle && state.activeDataset?.exportJsonHandle) {
+    const payload = exports[0]?.payload || { questions: [] };
+    const jsonBlob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    await writeBlobToHandle(state.activeDataset.exportJsonHandle, jsonBlob);
+
+    let zipHandle = state.activeDataset.zipHandle;
+    if (!zipHandle) {
+      zipHandle = await state.activeDataset.directoryHandle.getFileHandle("images.zip", { create: true });
+      state.activeDataset.zipHandle = zipHandle;
+      state.activeDataset.zipFileName = "images.zip";
+    }
+    await writeBlobToHandle(zipHandle, zipBlob);
+
+    state.dirty = false;
+    await renderAll();
+    toast("Datensatz im gewählten Ordner aktualisiert.");
+    return;
+  }
+
   exports.forEach((entry) => {
     downloadJson(entry.payload, baseFilenameFromUrl(entry.url));
   });
+  downloadBlob(zipBlob, state.activeDataset?.zipFileName || "images.zip");
   state.dirty = false;
-  renderAll();
-  toast("Export mit Original-Dateinamen heruntergeladen.");
+  await renderAll();
+  toast("JSON und images.zip mit Original-Dateinamen heruntergeladen.");
 }
 
-function saveAsCopyDownload() {
+async function saveAsCopyDownload() {
   syncAllQuestions();
   const suffix = ($("copySuffix")?.value || "bearbeitet").trim() || "bearbeitet";
   const exports = buildDatasetExports();
-  exports.forEach((entry) => {
-    const base = baseFilenameFromUrl(entry.url).replace(/\.json$/i, "");
-    downloadJson(entry.payload, `${base}_${suffix}.json`);
-  });
-  toast("Bearbeitete Kopie heruntergeladen.");
+  const base = baseFilenameFromUrl(exports[0]?.url || "export.json").replace(/\.json$/i, "");
+  const zipBase = (state.activeDataset?.zipFileName || "images.zip").replace(/\.zip$/i, "");
+  const jsonName = `${base}_${suffix}.json`;
+  const zipName = `${zipBase}_${suffix}.zip`;
+  const zipBlob = await buildImagesZipBlob();
+
+  if (state.activeDataset?.directoryHandle) {
+    const payload = exports[0]?.payload || { questions: [] };
+    const jsonBlob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const jsonHandle = await state.activeDataset.directoryHandle.getFileHandle(jsonName, { create: true });
+    const zipHandle = await state.activeDataset.directoryHandle.getFileHandle(zipName, { create: true });
+    await writeBlobToHandle(jsonHandle, jsonBlob);
+    await writeBlobToHandle(zipHandle, zipBlob);
+    toast(`Kopie im Ordner gespeichert: ${jsonName} + ${zipName}`);
+    return;
+  }
+
+  downloadJson(exports[0]?.payload || { questions: [] }, jsonName);
+  downloadBlob(zipBlob, zipName);
+  toast("Bearbeitete JSON + images.zip als Kopie heruntergeladen.");
 }
 
-async function loadDatasetFromFiles(jsonFiles, zipFile = null) {
-  if (!jsonFiles.length) {
-    alert("Bitte mindestens eine JSON-Datei auswählen.");
+function getFolderNameFromEntry(file) {
+  const rel = String(file?.webkitRelativePath || "");
+  const seg = rel.split("/").filter(Boolean);
+  return seg.length > 1 ? seg[0] : "Ordner";
+}
+
+async function loadFromResolvedFiles({ exportJsonFile, zipFile, folderName, handles = null }) {
+  clearLocalImageObjectUrls();
+  await loadJsonFiles([exportJsonFile]);
+  await loadZipFile(zipFile);
+
+  state.activeDataset = {
+    id: "upload",
+    label: folderName,
+    zipFileName: zipFile?.name || "images.zip",
+    directoryHandle: handles?.directoryHandle || null,
+    exportJsonHandle: handles?.exportJsonHandle || null,
+    zipHandle: handles?.zipHandle || null,
+  };
+  resetEditorState();
+  updateExamLists();
+  resetSearchConfig();
+  await renderAll();
+
+  const fileHint = $("loadedFileHint");
+  if (fileHint) {
+    const mode = handles ? "(Live)" : "";
+    const zipHint = zipFile ? ` + ${zipFile.name}` : "";
+    fileHint.textContent = `Geladen ${mode} aus Ordner „${folderName}“: ${exportJsonFile.name}${zipHint}`.trim();
+  }
+}
+
+async function loadDatasetFromDirectoryFiles(directoryFiles) {
+  if (!directoryFiles.length) {
+    alert("Bitte einen Ordner auswählen.");
+    return;
+  }
+
+  const exportJson = directoryFiles.find((file) => file.name.toLowerCase() === "export.json");
+  if (!exportJson) {
+    alert("Im gewählten Ordner wurde keine export.json gefunden.");
+    return;
+  }
+
+  const zipFile = directoryFiles.find((file) => file.name.toLowerCase() === "images.zip") || null;
+
+  try {
+    const folderName = getFolderNameFromEntry(exportJson);
+    await loadFromResolvedFiles({ exportJsonFile: exportJson, zipFile, folderName });
+    toast("Ordner geladen.");
+  } catch (e) {
+    alert("Fehler beim Laden des Ordners: " + e);
+  }
+}
+
+async function pickAndLoadDirectoryLive() {
+  if (!hasFileSystemAccessApi()) {
+    alert("Live-Bearbeitung ist in diesem Browser nicht verfügbar. Bitte den normalen Ordner-Import nutzen.");
     return;
   }
 
   try {
-    clearLocalImageObjectUrls();
-    await loadJsonFiles(jsonFiles);
-    await loadZipFile(zipFile);
+    const directoryHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+    const exportJsonHandle = await directoryHandle.getFileHandle("export.json");
+    const exportJsonFile = await exportJsonHandle.getFile();
 
-    const label = jsonFiles.length === 1
-      ? jsonFiles[0].name
-      : `${jsonFiles.length} Dateien`;
-
-    state.activeDataset = { id: "upload", label };
-    resetEditorState();
-    updateExamLists();
-    resetSearchConfig();
-    await renderAll();
-
-    const fileHint = $("loadedFileHint");
-    if (fileHint) {
-      const zipHint = zipFile ? ` + ${zipFile.name}` : "";
-      fileHint.textContent = `Geladen: ${jsonFiles.map((f) => f.name).join(", ")}${zipHint}`;
+    let zipHandle = null;
+    let zipFile = null;
+    try {
+      zipHandle = await directoryHandle.getFileHandle("images.zip");
+      zipFile = await zipHandle.getFile();
+    } catch {
+      zipHandle = null;
+      zipFile = null;
     }
 
-    toast("Dateien geladen.");
+    await loadFromResolvedFiles({
+      exportJsonFile,
+      zipFile,
+      folderName: directoryHandle.name || "Ordner",
+      handles: { directoryHandle, exportJsonHandle, zipHandle },
+    });
+
+    toast("Ordner mit Schreibzugriff geladen (Live-Speichern aktiv).");
   } catch (e) {
-    alert("Fehler beim Laden der Dateien: " + e);
+    if (e?.name === "AbortError") return;
+    alert("Fehler beim Live-Laden des Ordners: " + e);
   }
 }
 
 export function wireUiEvents() {
-  const jsonInput = $("jsonFileInput");
-  const zipInput = $("zipFileInput");
+  const folderInput = $("datasetFolderInput");
+  const pickFolderBtn = $("pickFolderBtn");
+
+  if (pickFolderBtn) {
+    pickFolderBtn.hidden = !hasFileSystemAccessApi();
+    pickFolderBtn.addEventListener("click", async () => {
+      await pickAndLoadDirectoryLive();
+    });
+  }
 
   const updateSelectedFileHint = () => {
-    const jsonFiles = Array.from(jsonInput.files || []);
-    const zipFile = (zipInput.files || [])[0] || null;
+    const files = Array.from(folderInput.files || []);
+    const exportJson = files.find((file) => file.name.toLowerCase() === "export.json");
+    const zipFile = files.find((file) => file.name.toLowerCase() === "images.zip") || null;
     const fileHint = $("loadedFileHint");
     if (!fileHint) return;
 
-    if (!jsonFiles.length) {
-      fileHint.textContent = "Noch keine Datei ausgewählt.";
+    if (!files.length) {
+      fileHint.textContent = "Noch kein Ordner ausgewählt.";
+      return;
+    }
+
+    const folderName = getFolderNameFromEntry(files[0]);
+    if (!exportJson) {
+      fileHint.textContent = `Ausgewählter Ordner „${folderName}“ enthält keine export.json.`;
       return;
     }
 
     const zipHint = zipFile ? ` + ${zipFile.name}` : "";
-    fileHint.textContent = `Ausgewählt: ${jsonFiles.map((f) => f.name).join(", ")}${zipHint}`;
+    fileHint.textContent = `Ausgewählt: Ordner „${folderName}“ mit ${exportJson.name}${zipHint}`;
   };
 
-  jsonInput.addEventListener("change", updateSelectedFileHint);
-  zipInput.addEventListener("change", updateSelectedFileHint);
+  folderInput.addEventListener("change", updateSelectedFileHint);
 
   $("loadFilesBtn").addEventListener("click", async () => {
-    const jsonFiles = Array.from(jsonInput.files || []);
-    const zipFile = (zipInput.files || [])[0] || null;
-    await loadDatasetFromFiles(jsonFiles, zipFile);
+    const folderFiles = Array.from(folderInput.files || []);
+    await loadDatasetFromDirectoryFiles(folderFiles);
   });
 
   $("startSearchBtn").addEventListener("click", async () => {
     if (!state.activeDataset) {
-      alert("Bitte zuerst JSON-Datei(en) laden.");
+      alert("Bitte zuerst einen Datensatz laden.");
       return;
     }
 
@@ -166,14 +286,14 @@ export function wireUiEvents() {
     }
   });
 
-  $("saveOriginalBtn").addEventListener("click", () => {
+  $("saveOriginalBtn").addEventListener("click", async () => {
     if (!state.activeDataset) return;
-    saveAsOriginalDownload();
+    await saveAsOriginalDownload();
   });
 
-  $("saveCopyBtn").addEventListener("click", () => {
+  $("saveCopyBtn").addEventListener("click", async () => {
     if (!state.activeDataset) return;
-    saveAsCopyDownload();
+    await saveAsCopyDownload();
   });
 
   ["prevPage", "nextPage"].forEach((id) => {
