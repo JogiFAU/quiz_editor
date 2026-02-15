@@ -13,6 +13,38 @@ export function filterByImageMode(qs, mode) {
   return qs;
 }
 
+export function filterByTopics(qs, topicFilters = []) {
+  if (!topicFilters || topicFilters.length === 0) return qs;
+  const set = new Set(topicFilters);
+
+  return qs.filter((q) => {
+    const superTopic = String(q.superTopic || "").trim() || "(Ohne Überthema)";
+    const subTopic = String(q.subTopic || "").trim();
+    if (set.has(`super::${superTopic}`)) return true;
+    if (subTopic && set.has(`sub::${superTopic}::${subTopic}`)) return true;
+    return false;
+  });
+}
+
+
+export function filterByQuality(qs, {
+  topicConfidenceMin = 0,
+  answerConfidenceMin = 0,
+  onlyRecommendChange = false,
+  onlyNeedsMaintenance = false,
+} = {}) {
+  return qs.filter((q) => {
+    const topicConfidence = Number(q.topicConfidence ?? 1);
+    const answerConfidence = Number(q.answerConfidence ?? 1);
+
+    if (topicConfidence > Number(topicConfidenceMin ?? 1)) return false;
+    if (answerConfidence > Number(answerConfidenceMin ?? 1)) return false;
+    if (onlyRecommendChange && !q.recommendChange) return false;
+    if (onlyNeedsMaintenance && !q.needsMaintenance) return false;
+    return true;
+  });
+}
+
 export function applyRandomAndShuffle(qs, { randomN = 0, shuffleQuestions = false } = {}) {
   const rng = mulberry32(Date.now());
 

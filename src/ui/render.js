@@ -21,13 +21,83 @@ function setHeader() {
   const shown = state.view === "search" ? state.searchOrder.length : 0;
   subtitle.textContent = `${state.activeDataset.label || state.activeDataset.id} · Editor`;
   progressText.textContent = `${shown}/${total}`;
-  rightStat.textContent = state.dirty ? "ungespeichert" : "gespeichert";
+  rightStat.textContent = state.dirty ? "Ungespeichert" : "Gespeichert";
   bar.style.width = total ? `${(shown / total) * 100}%` : "0%";
+}
+
+
+export function refreshHeaderStatus() {
+  setHeader();
 }
 
 export function updateExamLists(selectedExams = []) {
   const exams = Array.from(new Set(state.questionsAll.map((q) => q.examName).filter(Boolean))).sort();
   renderExamList("examListSearch", exams, selectedExams);
+}
+
+export function updateTopicList(selectedTopics = []) {
+  const el = $("topicListSearch");
+  if (!el) return;
+  el.innerHTML = "";
+
+  const selected = new Set(selectedTopics || []);
+  const grouped = new Map();
+
+  for (const q of state.questionsAll) {
+    const superTopic = String(q.superTopic || "").trim();
+    const subTopic = String(q.subTopic || "").trim();
+    if (!superTopic && !subTopic) continue;
+
+    const superName = superTopic || "(Ohne Überthema)";
+    if (!grouped.has(superName)) grouped.set(superName, new Set());
+    if (subTopic) grouped.get(superName).add(subTopic);
+  }
+
+  const superTopics = Array.from(grouped.keys()).sort((a, b) => a.localeCompare(b, "de"));
+
+  for (const superTopic of superTopics) {
+    const subTopics = Array.from(grouped.get(superTopic) || []).sort((a, b) => a.localeCompare(b, "de"));
+    const superValue = `super::${superTopic}`;
+
+    const superItem = document.createElement("label");
+    superItem.className = "examitem selected topicitem topicitem--super";
+
+    const superCb = document.createElement("input");
+    superCb.type = "checkbox";
+    superCb.dataset.topicType = "super";
+    superCb.dataset.topicValue = superTopic;
+    superCb.checked = selected.has(superValue);
+
+    const superNameEl = document.createElement("div");
+    superNameEl.className = "examname";
+    superNameEl.textContent = superTopic;
+
+    superItem.appendChild(superCb);
+    superItem.appendChild(superNameEl);
+    el.appendChild(superItem);
+
+    for (const subTopic of subTopics) {
+      const subItem = document.createElement("label");
+      subItem.className = "examitem selected topicitem topicitem--sub";
+
+      const subCb = document.createElement("input");
+      subCb.type = "checkbox";
+      subCb.dataset.topicType = "sub";
+      subCb.dataset.topicValue = subTopic;
+      subCb.dataset.parentTopic = superTopic;
+
+      const subValue = `sub::${superTopic}::${subTopic}`;
+      subCb.checked = selected.has(subValue);
+
+      const subNameEl = document.createElement("div");
+      subNameEl.className = "examname";
+      subNameEl.textContent = subTopic;
+
+      subItem.appendChild(subCb);
+      subItem.appendChild(subNameEl);
+      el.appendChild(subItem);
+    }
+  }
 }
 
 function renderExamList(containerId, exams, selectedExams = []) {
@@ -218,8 +288,26 @@ export async function renderMain() {
 
     const h = document.createElement("div");
     h.className = "qhead";
-    h.innerHTML = `<div><strong>ID:</strong> ${q.id}</div>`;
+
+    const formatConfidence = (value) => Number.isFinite(Number(value)) ? Number(value).toFixed(2) : "—";
+    const topicConf = formatConfidence(q.topicConfidence);
+    const answerConf = formatConfidence(q.answerConfidence);
+
+    h.innerHTML = `
+      <div><strong>ID:</strong> ${q.id}</div>
+      <div class="small"><strong>Topic-Conf:</strong> ${topicConf} <strong>(${q.topicSource || "n/a"})</strong></div>
+      <div class="small"><strong>Antwort-Conf:</strong> ${answerConf} <strong>(${q.answerSource || "n/a"})</strong></div>
+    `;
     card.appendChild(h);
+
+    const aiInfo = document.createElement("div");
+    aiInfo.className = "small";
+    aiInfo.style.marginTop = "4px";
+    aiInfo.innerHTML = `
+      <div><strong>AI-Begründung Topic:</strong> ${q.topicReason || "—"}</div>
+      <div><strong>AI-Begründung Antwort:</strong> ${q.answerReason || "—"}</div>
+    `;
+    card.appendChild(aiInfo);
 
     const addField = (label, value, onChange, type = "text", options = {}) => {
       const wrap = document.createElement("label");

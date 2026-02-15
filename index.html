@@ -46,8 +46,39 @@
     <hr class="sep">
 
     <h2>2) Filter & Suche</h2>
-    <label>Klausuren auswählen (optional)</label>
-    <div id="examListSearch" class="examlist"></div>
+    <details class="filterGroup" open>
+      <summary>Klausuren auswählen (optional)</summary>
+      <div id="examListSearch" class="examlist"></div>
+    </details>
+
+    <details class="filterGroup" open>
+      <summary>Filter: Topics</summary>
+      <div class="small">Themenauswahl + Confidence-Cutoff für die Topic-Einordnung.</div>
+      <div id="topicListSearch" class="examlist"></div>
+      <label for="topicConfidenceMinSearch">Topic-Confidence Cutoff (≤): <span id="topicConfidenceMinValue">1.00</span></label>
+      <div class="row" style="grid-template-columns:1fr 92px;">
+        <input id="topicConfidenceMinSearch" type="range" min="0" max="1" step="0.01" value="1" />
+        <input id="topicConfidenceMinInput" type="number" min="0" max="1" step="0.01" value="1" />
+      </div>
+    </details>
+
+    <details class="filterGroup" open>
+      <summary>Filter: Richtigkeit der Antwort</summary>
+      <div class="small">Confidence aus passB, sonst passA.</div>
+      <label for="answerConfidenceMinSearch">Antwort-Confidence Cutoff (≤): <span id="answerConfidenceMinValue">1.00</span></label>
+      <div class="row" style="grid-template-columns:1fr 92px;">
+        <input id="answerConfidenceMinSearch" type="range" min="0" max="1" step="0.01" value="1" />
+        <input id="answerConfidenceMinInput" type="number" min="0" max="1" step="0.01" value="1" />
+      </div>
+      <label class="checkrow">
+        <input id="onlyRecommendChangeSearch" type="checkbox" />
+        <span>Nur Fragen mit <code>recommendChange: true</code></span>
+      </label>
+      <label class="checkrow">
+        <input id="onlyNeedsMaintenanceSearch" type="checkbox" />
+        <span>Nur Fragen mit <code>needsMaintenance: true</code> / <code>needsMaintanence: true</code></span>
+      </label>
+    </details>
 
     <label>Bilder</label>
     <select id="imageFilterSearch">
@@ -78,13 +109,6 @@
     <label>Ersetzen durch</label>
     <input id="bulkReplaceText" type="text" placeholder="Neuer Text" />
     <button class="btn" id="applyReplaceBtn" type="button">Auf Treffer anwenden</button>
-
-    <hr class="sep">
-
-    <h2>2c) Themenstruktur (optional)</h2>
-    <div class="small">Lade eine JSON-Datei mit Überthemen und Unterthemen für Vorschläge im Editor.</div>
-    <input id="topicTreeInput" type="file" accept="application/json,.json" style="margin-top:8px;">
-    <div class="small" id="topicTreeHint" style="margin-top:8px;">Keine Themenquelle geladen.</div>
 
     <h2>3) Speichern</h2>
     <div class="small">Hinweis: Bei Live-Ordnerzugriff wird direkt im gewählten Ordner gespeichert, sonst per Download. Immer als Einheit: <code>export.json</code> + vollständige <code>images.zip</code>.</div>

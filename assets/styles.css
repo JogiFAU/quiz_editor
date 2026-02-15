@@ -294,6 +294,19 @@ summary { cursor: pointer; color: var(--muted); }
   font-weight: 700;
 }
 
+.filterGroup {
+  margin: 10px 0;
+}
+.filterGroup summary {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.filterGroup[open] summary {
+  margin-bottom: 8px;
+}
+
 /* Exam list */
 .examlist {
   border: 1px solid var(--border);
@@ -334,6 +347,15 @@ summary { cursor: pointer; color: var(--muted); }
 .examseg.bad { background: rgba(198,40,40,.9); }
 .examseg.neu { background: rgba(96,125,139,.9); }
 .exampct { font-size: 12px; color: var(--muted); font-weight: 800; }
+.topicitem {
+  grid-template-columns: 20px 1fr;
+}
+.topicitem--sub {
+  padding-left: 28px;
+}
+.topicitem input {
+  margin: 0;
+}
 
 /* TOC */
 .toc {

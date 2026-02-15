@@ -1,19 +1,39 @@
 import { normSpace } from "../utils.js";
 import { state } from "../state.js";
 
+function pickFirstKey(keys, preferred = [], matcher = null) {
+  for (const key of preferred) {
+    if (keys.includes(key)) return key;
+  }
+  if (!matcher) return null;
+  return keys.find((k) => matcher.test(k)) || null;
+}
+
 function detectTopicKey(q) {
   const keys = Object.keys(q || {});
-  return keys.find((k) => /topic|thema/i.test(k)) || null;
+  return pickFirstKey(
+    keys,
+    ["topic", "aiTopic"],
+    /topic|thema/i,
+  );
 }
 
 function detectSuperTopicKey(q) {
   const keys = Object.keys(q || {});
-  return keys.find((k) => /super.?topic|ober.?thema|haupt.?thema/i.test(k)) || null;
+  return pickFirstKey(
+    keys,
+    ["aiSuperTopic", "superTopic", "oberThema", "hauptThema"],
+    /super.?topic|ober.?thema|haupt.?thema/i,
+  );
 }
 
 function detectSubTopicKey(q) {
   const keys = Object.keys(q || {});
-  return keys.find((k) => /sub.?topic|unter.?thema/i.test(k)) || null;
+  return pickFirstKey(
+    keys,
+    ["aiSubtopic", "subTopic", "unterThema"],
+    /sub.?topic|unter.?thema/i,
+  );
 }
 
 function detectMaintenanceKey(q) {
@@ -30,6 +50,55 @@ function parseLegacyTopic(topic) {
   return { superTopic: normSpace(match[1]), subTopic: normSpace(match[2]) };
 }
 
+
+function toUnitNumber(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.min(1, n));
+}
+
+function extractTopicConfidence(q) {
+  return toUnitNumber(
+    q?.aiAudit?.topicFinal?.confidence
+      ?? q?.aiAudit?.topicInitial?.confidence
+      ?? q?.aiTopicConfidence,
+  );
+}
+
+function extractAnswerConfidenceAndFlags(q) {
+  const passB = q?.aiAudit?.answerPlausibility?.passB || null;
+  const passA = q?.aiAudit?.answerPlausibility?.passA || null;
+  const activePass = passB || passA || null;
+
+  const answerConfidence = toUnitNumber(activePass?.confidence);
+  const recommendChange = !!(activePass?.recommendChange ?? passA?.recommendChange ?? q?.recommendChange);
+  const maintenance = q?.aiAudit?.maintenance || null;
+  const needsMaintenance = !!(
+    maintenance?.needsMaintenance
+    ?? q?.aiNeedsMaintenance
+    ?? q?.needsMaintenance
+    ?? q?.needsMaintanence
+  );
+
+  return { answerConfidence, recommendChange, needsMaintenance };
+}
+
+
+function extractAiInfo(q) {
+  const topicFinal = q?.aiAudit?.topicFinal || null;
+  const topicInitial = q?.aiAudit?.topicInitial || null;
+  const passB = q?.aiAudit?.answerPlausibility?.passB || null;
+  const passA = q?.aiAudit?.answerPlausibility?.passA || null;
+  const activePass = passB || passA || null;
+
+  return {
+    topicReason: normSpace(topicFinal?.reasonShort || topicInitial?.reasonShort || ""),
+    topicSource: String(topicFinal?.source || ""),
+    answerReason: normSpace(activePass?.reasonShort || ""),
+    answerSource: passB ? "passB" : (passA ? "passA" : ""),
+  };
+}
+
 function normalizeQuestion(q, fileIndex) {
   const id = String(q.id || "").trim();
   if (!id) return null;
@@ -40,6 +109,9 @@ function normalizeQuestion(q, fileIndex) {
   const maintenanceKey = detectMaintenanceKey(q);
   const topic = topicKey ? normSpace(q[topicKey] || "") : "";
   const legacySplit = parseLegacyTopic(topic);
+  const topicConfidence = extractTopicConfidence(q);
+  const { answerConfidence, recommendChange, needsMaintenance } = extractAnswerConfidenceAndFlags(q);
+  const { topicReason, topicSource, answerReason, answerSource } = extractAiInfo(q);
 
   return {
     id,
@@ -55,6 +127,14 @@ function normalizeQuestion(q, fileIndex) {
     superTopic: normSpace((superTopicKey ? q[superTopicKey] : "") || legacySplit.superTopic),
     subTopic: normSpace((subTopicKey ? q[subTopicKey] : "") || legacySplit.subTopic),
     needsReview: !!(maintenanceKey ? q[maintenanceKey] : false),
+    topicConfidence,
+    answerConfidence,
+    recommendChange,
+    needsMaintenance,
+    topicReason,
+    topicSource,
+    answerReason,
+    answerSource,
     text: normSpace(q.questionText || q.text || ""),
     explanation: normSpace(q.explanationText || q.explanation || ""),
     answers: (q.answers || []).map((a, idx) => ({
