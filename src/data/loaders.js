@@ -6,21 +6,55 @@ function detectTopicKey(q) {
   return keys.find((k) => /topic|thema/i.test(k)) || null;
 }
 
+function detectSuperTopicKey(q) {
+  const keys = Object.keys(q || {});
+  return keys.find((k) => /super.?topic|ober.?thema|haupt.?thema/i.test(k)) || null;
+}
+
+function detectSubTopicKey(q) {
+  const keys = Object.keys(q || {});
+  return keys.find((k) => /sub.?topic|unter.?thema/i.test(k)) || null;
+}
+
+function detectMaintenanceKey(q) {
+  const keys = Object.keys(q || {});
+  return keys.find((k) => /wartung|fehlerhaft|defekt|maintenance|needs.?review|invalid/i.test(k)) || null;
+}
+
+function parseLegacyTopic(topic) {
+  const normalized = normSpace(topic || "");
+  if (!normalized) return { superTopic: "", subTopic: "" };
+
+  const match = normalized.match(/^(.+?)\s*(?:>|\/|::|->)\s*(.+)$/);
+  if (!match) return { superTopic: normalized, subTopic: "" };
+  return { superTopic: normSpace(match[1]), subTopic: normSpace(match[2]) };
+}
+
 function normalizeQuestion(q, fileIndex) {
   const id = String(q.id || "").trim();
   if (!id) return null;
 
   const topicKey = detectTopicKey(q);
+  const superTopicKey = detectSuperTopicKey(q);
+  const subTopicKey = detectSubTopicKey(q);
+  const maintenanceKey = detectMaintenanceKey(q);
   const topic = topicKey ? normSpace(q[topicKey] || "") : "";
+  const legacySplit = parseLegacyTopic(topic);
 
   return {
     id,
     sourceFileIndex: fileIndex,
     sourceRef: q,
     topicKey,
+    superTopicKey,
+    subTopicKey,
+    maintenanceKey,
     examName: q.examName || "",
     examYear: q.examYear != null ? String(q.examYear) : "",
     topic,
+    superTopic: normSpace((superTopicKey ? q[superTopicKey] : "") || legacySplit.superTopic),
+    subTopic: normSpace((subTopicKey ? q[subTopicKey] : "") || legacySplit.subTopic),
+    needsReview: !!(maintenanceKey ? q[maintenanceKey] : false),
     text: normSpace(q.questionText || q.text || ""),
     explanation: normSpace(q.explanationText || q.explanation || ""),
     answers: (q.answers || []).map((a, idx) => ({
@@ -50,7 +84,16 @@ export function syncQuestionToSource(question) {
   }
 
   const topicKey = question.topicKey || "topic";
-  raw[topicKey] = question.topic || "";
+  const canonicalTopic = [question.superTopic, question.subTopic].filter(Boolean).join(" > ");
+  raw[topicKey] = canonicalTopic || question.topic || "";
+
+  const superTopicKey = question.superTopicKey || "superTopic";
+  const subTopicKey = question.subTopicKey || "subTopic";
+  raw[superTopicKey] = question.superTopic || "";
+  raw[subTopicKey] = question.subTopic || "";
+
+  const maintenanceKey = question.maintenanceKey || "needsReview";
+  raw[maintenanceKey] = !!question.needsReview;
 
   raw.answers = (question.answers || []).map((a, idx) => ({
     ...(raw.answers?.[idx] || {}),

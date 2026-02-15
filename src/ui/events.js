@@ -58,6 +58,8 @@ function resetSearchConfig() {
   $("searchInAnswers").checked = false;
   $("pageSize").value = "50";
   $("pageNumber").value = "1";
+  $("bulkSearchText").value = "";
+  $("bulkReplaceText").value = "";
 }
 
 function baseFilenameFromUrl(url) {
@@ -209,6 +211,113 @@ function getFolderNameFromEntry(file) {
   return seg.length > 1 ? seg[0] : "Ordner";
 }
 
+function parseTopicTree(raw) {
+  const source = typeof raw === "string" ? JSON.parse(raw) : raw;
+  const items = Array.isArray(source?.superTopics) ? source.superTopics : [];
+  const superTopics = [];
+  const allSubTopics = new Set();
+  const subTopicsBySuper = {};
+
+  for (const item of items) {
+    const superName = String(item?.name || "").trim();
+    if (!superName) continue;
+
+    const subs = Array.isArray(item?.subtopics)
+      ? item.subtopics.map((s) => String(s || "").trim()).filter(Boolean)
+      : [];
+
+    superTopics.push(superName);
+    subTopicsBySuper[superName] = subs;
+    subs.forEach((s) => allSubTopics.add(s));
+  }
+
+  return {
+    superTopics: Array.from(new Set(superTopics)).sort(),
+    subTopicsBySuper,
+    allSubTopics: Array.from(allSubTopics).sort(),
+  };
+}
+
+async function loadTopicTreeFromFile(file) {
+  if (!file) {
+    state.topicCatalog = null;
+    const hint = $("topicTreeHint");
+    if (hint) hint.textContent = "Keine Themenquelle geladen.";
+    await renderAll();
+    return;
+  }
+
+  try {
+    const txt = await file.text();
+    state.topicCatalog = parseTopicTree(txt);
+    const hint = $("topicTreeHint");
+    if (hint) {
+      hint.textContent = `Geladen: ${file.name} · ${state.topicCatalog.superTopics.length} Überthemen`; 
+    }
+    await renderAll();
+    toast("Themenstruktur geladen.");
+  } catch (err) {
+    alert("Themenstruktur konnte nicht gelesen werden. Erwartetes Format: { superTopics: [{ name, subtopics: [] }] }");
+  }
+}
+
+function replaceAcrossQuestion(question, searchText, replaceText) {
+  const apply = (value) => String(value || "").split(searchText).join(replaceText);
+  let touched = false;
+
+  const textNew = apply(question.text);
+  if (textNew !== question.text) {
+    question.text = textNew;
+    touched = true;
+  }
+
+  const explanationNew = apply(question.explanation);
+  if (explanationNew !== question.explanation) {
+    question.explanation = explanationNew;
+    touched = true;
+  }
+
+  question.answers.forEach((a) => {
+    const next = apply(a.text);
+    if (next !== a.text) {
+      a.text = next;
+      touched = true;
+    }
+  });
+
+  return touched;
+}
+
+async function applyBulkReplace() {
+  if (state.view !== "search") {
+    alert("Bitte zuerst über „Fragen anzeigen“ eine Trefferliste erzeugen.");
+    return;
+  }
+
+  const searchText = $("bulkSearchText").value;
+  const replaceText = $("bulkReplaceText").value;
+  if (!searchText) {
+    alert("Bitte einen Suchtext für Ersetzen eingeben.");
+    return;
+  }
+
+  const ids = new Set(state.searchOrder);
+  let changed = 0;
+  state.questionsAll.forEach((q) => {
+    if (!ids.has(q.id)) return;
+    if (replaceAcrossQuestion(q, searchText, replaceText)) changed++;
+  });
+
+  if (!changed) {
+    toast("Keine Treffer für Suchen/Ersetzen gefunden.");
+    return;
+  }
+
+  state.dirty = true;
+  await renderAll();
+  toast(`Suchen/Ersetzen auf ${changed} Frage(n) angewendet.`);
+}
+
 async function loadFromResolvedFiles({ exportJsonFile, zipFile, folderName, handles = null, uiSnapshot = null }) {
   clearLocalImageObjectUrls();
   await loadJsonFiles([exportJsonFile]);
@@ -340,6 +449,14 @@ export function wireUiEvents() {
     await loadDatasetFromDirectoryFiles(folderFiles);
   });
 
+  const topicTreeInput = $("topicTreeInput");
+  if (topicTreeInput) {
+    topicTreeInput.addEventListener("change", async () => {
+      const file = topicTreeInput.files?.[0] || null;
+      await loadTopicTreeFromFile(file);
+    });
+  }
+
   $("startSearchBtn").addEventListener("click", async () => {
     if (!state.activeDataset) {
       alert("Bitte zuerst einen Datensatz laden.");
@@ -353,6 +470,10 @@ export function wireUiEvents() {
     state.view = "search";
     $("pageNumber").value = "1";
     await renderAll();
+  });
+
+  $("applyReplaceBtn").addEventListener("click", async () => {
+    await applyBulkReplace();
   });
 
   $("resetConfigSearchBtn").addEventListener("click", async () => {

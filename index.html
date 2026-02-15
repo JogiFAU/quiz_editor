@@ -57,7 +57,7 @@
     </select>
 
     <label>Suche</label>
-    <input id="searchText" type="text" placeholder="Stichwort..." />
+    <input id="searchText" type="text" placeholder="Stichwort oder mehrere mit ; trennen" />
 
     <label class="checkrow">
       <input id="searchInAnswers" type="checkbox" />
@@ -69,7 +69,22 @@
       <button class="btn" id="resetConfigSearchBtn" type="button">Zurücksetzen</button>
     </div>
 
+
     <hr class="sep">
+
+    <h2>2b) Sammelbearbeitung</h2>
+    <label>Suche (Text ersetzen in Frage, Erklärung, Antworten)</label>
+    <input id="bulkSearchText" type="text" placeholder="Zu suchender Text" />
+    <label>Ersetzen durch</label>
+    <input id="bulkReplaceText" type="text" placeholder="Neuer Text" />
+    <button class="btn" id="applyReplaceBtn" type="button">Auf Treffer anwenden</button>
+
+    <hr class="sep">
+
+    <h2>2c) Themenstruktur (optional)</h2>
+    <div class="small">Lade eine JSON-Datei mit Überthemen und Unterthemen für Vorschläge im Editor.</div>
+    <input id="topicTreeInput" type="file" accept="application/json,.json" style="margin-top:8px;">
+    <div class="small" id="topicTreeHint" style="margin-top:8px;">Keine Themenquelle geladen.</div>
 
     <h2>3) Speichern</h2>
     <div class="small">Hinweis: Bei Live-Ordnerzugriff wird direkt im gewählten Ordner gespeichert, sonst per Download. Immer als Einheit: <code>export.json</code> + vollständige <code>images.zip</code>.</div>

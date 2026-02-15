@@ -19,6 +19,9 @@ export const state = {
 
   // UI state
   dirty: false,
+
+  // Optional uploaded taxonomy source for topic suggestions
+  topicCatalog: null,
 };
 
 export function resetEditorState() {
@@ -26,4 +29,5 @@ export function resetEditorState() {
   state.searchConfig = null;
   state.searchOrder = [];
   state.dirty = false;
+  state.topicCatalog = null;
 }

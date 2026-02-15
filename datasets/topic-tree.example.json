@@ -1,0 +1,28 @@
+{
+  "superTopics": [
+    {
+      "name": "Programmierung",
+      "subtopics": [
+        "Java Grundlagen",
+        "Objektorientierung",
+        "Fehlerbehandlung"
+      ]
+    },
+    {
+      "name": "Datenbanken",
+      "subtopics": [
+        "Relationale Modelle",
+        "SQL",
+        "Normalisierung"
+      ]
+    },
+    {
+      "name": "Netzwerke",
+      "subtopics": [
+        "OSI-Modell",
+        "TCP/IP",
+        "Sicherheit"
+      ]
+    }
+  ]
+}

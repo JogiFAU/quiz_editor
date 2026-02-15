@@ -27,13 +27,23 @@ export function applyRandomAndShuffle(qs, { randomN = 0, shuffleQuestions = fals
 }
 
 export function searchQuestions(qs, { query = "", inAnswers = false } = {}) {
-  const q = (query || "").trim().toLowerCase();
-  if (!q) return qs;
+  const terms = String(query || "")
+    .split(";")
+    .map((x) => x.trim().toLowerCase())
+    .filter(Boolean);
+  if (!terms.length) return qs;
 
-  return qs.filter(item => {
-    if ((item.text || "").toLowerCase().includes(q)) return true;
-    if (!inAnswers) return false;
-    return (item.answers || []).some(a => (a.text || "").toLowerCase().includes(q));
+  return qs.filter((item) => {
+    const text = (item.text || "").toLowerCase();
+    const answers = inAnswers
+      ? (item.answers || []).map((a) => (a.text || "").toLowerCase())
+      : [];
+
+    return terms.every((term) => {
+      if (text.includes(term)) return true;
+      if (!inAnswers) return false;
+      return answers.some((aText) => aText.includes(term));
+    });
   });
 }
 

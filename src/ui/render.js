@@ -156,6 +156,38 @@ function createImageEditor(question) {
   return wrap;
 }
 
+function ensureDatalist(id, options = []) {
+  let list = document.getElementById(id);
+  if (!list) {
+    list = document.createElement("datalist");
+    list.id = id;
+    document.body.appendChild(list);
+  }
+  list.innerHTML = "";
+  options.forEach((opt) => {
+    const o = document.createElement("option");
+    o.value = opt;
+    list.appendChild(o);
+  });
+}
+
+function updateTopicHints(question, overInput, underInput) {
+  const catalog = state.topicCatalog;
+  const over = catalog?.superTopics || [];
+  ensureDatalist("superTopicOptions", over);
+
+  const selectedOver = overInput?.value || question.superTopic || "";
+  const under = selectedOver && catalog?.subTopicsBySuper?.[selectedOver]
+    ? catalog.subTopicsBySuper[selectedOver]
+    : catalog?.allSubTopics || [];
+  ensureDatalist("subTopicOptions", under);
+
+  if (underInput && underInput.value && !under.includes(underInput.value) && selectedOver) {
+    // preserve free text, but keep input list in sync for next edits
+    underInput.setAttribute("list", "subTopicOptions");
+  }
+}
+
 export async function renderMain() {
   setHeader();
   const list = $("questionList");
@@ -189,7 +221,7 @@ export async function renderMain() {
     h.innerHTML = `<div><strong>ID:</strong> ${q.id}</div>`;
     card.appendChild(h);
 
-    const addField = (label, value, onChange, type = "text") => {
+    const addField = (label, value, onChange, type = "text", options = {}) => {
       const wrap = document.createElement("label");
       wrap.className = "editorField";
       const ttl = document.createElement("div");
@@ -198,20 +230,50 @@ export async function renderMain() {
 
       const inp = document.createElement(type === "textarea" ? "textarea" : "input");
       if (type !== "textarea") inp.type = "text";
+      if (options.listId) inp.setAttribute("list", options.listId);
       inp.value = value || "";
       inp.addEventListener("input", () => {
-        onChange(inp.value);
+        onChange(inp.value, inp);
         state.dirty = true;
       });
 
       wrap.appendChild(ttl);
       wrap.appendChild(inp);
       card.appendChild(wrap);
+      return inp;
     };
 
     addField("Klausur", q.examName, (v) => q.examName = v);
     addField("Jahr", q.examYear, (v) => q.examYear = v);
-    addField("Topic/Thema", q.topic, (v) => q.topic = v);
+
+    const superTopicInput = addField("Überthema", q.superTopic, (v) => {
+      q.superTopic = v;
+      q.topic = [q.superTopic, q.subTopic].filter(Boolean).join(" > ");
+      updateTopicHints(q, superTopicInput, subTopicInput);
+    }, "text", { listId: "superTopicOptions" });
+
+    const subTopicInput = addField("Unterthema", q.subTopic, (v) => {
+      q.subTopic = v;
+      q.topic = [q.superTopic, q.subTopic].filter(Boolean).join(" > ");
+    }, "text", { listId: "subTopicOptions" });
+
+    updateTopicHints(q, superTopicInput, subTopicInput);
+
+    const reviewWrap = document.createElement("label");
+    reviewWrap.className = "checkrow editorField";
+    const reviewToggle = document.createElement("input");
+    reviewToggle.type = "checkbox";
+    reviewToggle.checked = !!q.needsReview;
+    reviewToggle.addEventListener("change", () => {
+      q.needsReview = reviewToggle.checked;
+      state.dirty = true;
+    });
+    const reviewLabel = document.createElement("span");
+    reviewLabel.textContent = "Fehlerhaft / wartungsbedürftig";
+    reviewWrap.appendChild(reviewToggle);
+    reviewWrap.appendChild(reviewLabel);
+    card.appendChild(reviewWrap);
+
     addField("Frage", q.text, (v) => q.text = v, "textarea");
     addField("Erklärung", q.explanation, (v) => q.explanation = v, "textarea");
 
