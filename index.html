@@ -34,15 +34,13 @@
 <div class="wrap">
   <aside class="card">
     <h2>1) Dateien laden</h2>
-    <div class="small">Lade eine oder mehrere <code>export.json</code>-Dateien per Browserdialog.</div>
-    <label for="jsonFileInput">JSON-Datei(en)</label>
-    <input id="jsonFileInput" type="file" accept="application/json,.json" multiple>
-    <label for="zipFileInput">Bilder-ZIP (optional)</label>
-    <input id="zipFileInput" type="file" accept="application/zip,.zip">
+    <div class="small">Wähle einen Datensatz-Ordner. Erwartet werden <code>export.json</code> und optional <code>images.zip</code>.</div>
+    <label for="datasetFolderInput">Datensatz-Ordner</label>
+    <input id="datasetFolderInput" type="file" webkitdirectory directory>
     <div class="row2" style="margin-top:10px;">
-      <button class="btn primary" id="loadFilesBtn" type="button">Dateien laden</button>
+      <button class="btn primary" id="loadFilesBtn" type="button">Ordner laden</button>
     </div>
-    <div class="small" id="loadedFileHint" style="margin-top:8px;">Noch keine Datei ausgewählt.</div>
+    <div class="small" id="loadedFileHint" style="margin-top:8px;">Noch kein Ordner ausgewählt.</div>
 
     <hr class="sep">
 
@@ -73,7 +71,7 @@
     <hr class="sep">
 
     <h2>3) Speichern</h2>
-    <div class="small">Hinweis: Browser-Apps können Originaldateien nicht direkt überschreiben. Beim Speichern wird ein Download gestartet.</div>
+    <div class="small">Hinweis: Beim Speichern werden immer <code>export.json</code> und eine vollständige <code>images.zip</code> heruntergeladen.</div>
     <div class="row2" style="margin-top:10px;">
       <button class="btn primary" id="saveOriginalBtn" type="button">Mit Original-Dateinamen speichern</button>
       <button class="btn" id="saveCopyBtn" type="button">Als Kopie speichern</button>

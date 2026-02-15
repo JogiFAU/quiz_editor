@@ -1,7 +1,7 @@
 import { $, toast } from "../utils.js";
 import { state, resetEditorState } from "../state.js";
 import { loadJsonFiles, syncQuestionToSource, buildDatasetExports } from "../data/loaders.js";
-import { clearLocalImageObjectUrls, loadZipFile } from "../data/zipImages.js";
+import { buildImagesZipBlob, clearLocalImageObjectUrls, loadZipFile } from "../data/zipImages.js";
 import { filterByExams, filterByImageMode, searchQuestions } from "../quiz/filters.js";
 import { renderAll, updateExamLists } from "./render.js";
 
@@ -45,6 +45,10 @@ function baseFilenameFromUrl(url) {
 
 function downloadJson(payload, filename) {
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  downloadBlob(blob, filename);
+}
+
+function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -59,18 +63,20 @@ function syncAllQuestions() {
   for (const q of state.questionsAll) syncQuestionToSource(q);
 }
 
-function saveAsOriginalDownload() {
+async function saveAsOriginalDownload() {
   syncAllQuestions();
   const exports = buildDatasetExports();
   exports.forEach((entry) => {
     downloadJson(entry.payload, baseFilenameFromUrl(entry.url));
   });
+  const zipBlob = await buildImagesZipBlob();
+  downloadBlob(zipBlob, state.activeDataset?.zipFileName || "images.zip");
   state.dirty = false;
   renderAll();
-  toast("Export mit Original-Dateinamen heruntergeladen.");
+  toast("JSON und images.zip mit Original-Dateinamen heruntergeladen.");
 }
 
-function saveAsCopyDownload() {
+async function saveAsCopyDownload() {
   syncAllQuestions();
   const suffix = ($("copySuffix")?.value || "bearbeitet").trim() || "bearbeitet";
   const exports = buildDatasetExports();
@@ -78,25 +84,44 @@ function saveAsCopyDownload() {
     const base = baseFilenameFromUrl(entry.url).replace(/\.json$/i, "");
     downloadJson(entry.payload, `${base}_${suffix}.json`);
   });
-  toast("Bearbeitete Kopie heruntergeladen.");
+  const zipBase = (state.activeDataset?.zipFileName || "images.zip").replace(/\.zip$/i, "");
+  const zipBlob = await buildImagesZipBlob();
+  downloadBlob(zipBlob, `${zipBase}_${suffix}.zip`);
+  toast("Bearbeitete JSON + images.zip als Kopie heruntergeladen.");
 }
 
-async function loadDatasetFromFiles(jsonFiles, zipFile = null) {
-  if (!jsonFiles.length) {
-    alert("Bitte mindestens eine JSON-Datei auswählen.");
+function getFolderNameFromEntry(file) {
+  const rel = String(file?.webkitRelativePath || "");
+  const seg = rel.split("/").filter(Boolean);
+  return seg.length > 1 ? seg[0] : "Ordner";
+}
+
+async function loadDatasetFromDirectoryFiles(directoryFiles) {
+  if (!directoryFiles.length) {
+    alert("Bitte einen Ordner auswählen.");
     return;
   }
 
+  const exportJson = directoryFiles.find((file) => file.name.toLowerCase() === "export.json");
+  if (!exportJson) {
+    alert("Im gewählten Ordner wurde keine export.json gefunden.");
+    return;
+  }
+
+  const zipFile = directoryFiles.find((file) => file.name.toLowerCase() === "images.zip") || null;
+
   try {
     clearLocalImageObjectUrls();
-    await loadJsonFiles(jsonFiles);
+    await loadJsonFiles([exportJson]);
     await loadZipFile(zipFile);
 
-    const label = jsonFiles.length === 1
-      ? jsonFiles[0].name
-      : `${jsonFiles.length} Dateien`;
+    const folderName = getFolderNameFromEntry(exportJson);
 
-    state.activeDataset = { id: "upload", label };
+    state.activeDataset = {
+      id: "upload",
+      label: folderName,
+      zipFileName: zipFile?.name || "images.zip",
+    };
     resetEditorState();
     updateExamLists();
     resetSearchConfig();
@@ -105,41 +130,45 @@ async function loadDatasetFromFiles(jsonFiles, zipFile = null) {
     const fileHint = $("loadedFileHint");
     if (fileHint) {
       const zipHint = zipFile ? ` + ${zipFile.name}` : "";
-      fileHint.textContent = `Geladen: ${jsonFiles.map((f) => f.name).join(", ")}${zipHint}`;
+      fileHint.textContent = `Geladen aus Ordner „${folderName}“: ${exportJson.name}${zipHint}`;
     }
 
-    toast("Dateien geladen.");
+    toast("Ordner geladen.");
   } catch (e) {
-    alert("Fehler beim Laden der Dateien: " + e);
+    alert("Fehler beim Laden des Ordners: " + e);
   }
 }
 
 export function wireUiEvents() {
-  const jsonInput = $("jsonFileInput");
-  const zipInput = $("zipFileInput");
+  const folderInput = $("datasetFolderInput");
 
   const updateSelectedFileHint = () => {
-    const jsonFiles = Array.from(jsonInput.files || []);
-    const zipFile = (zipInput.files || [])[0] || null;
+    const files = Array.from(folderInput.files || []);
+    const exportJson = files.find((file) => file.name.toLowerCase() === "export.json");
+    const zipFile = files.find((file) => file.name.toLowerCase() === "images.zip") || null;
     const fileHint = $("loadedFileHint");
     if (!fileHint) return;
 
-    if (!jsonFiles.length) {
-      fileHint.textContent = "Noch keine Datei ausgewählt.";
+    if (!files.length) {
+      fileHint.textContent = "Noch kein Ordner ausgewählt.";
+      return;
+    }
+
+    const folderName = getFolderNameFromEntry(files[0]);
+    if (!exportJson) {
+      fileHint.textContent = `Ausgewählter Ordner „${folderName}“ enthält keine export.json.`;
       return;
     }
 
     const zipHint = zipFile ? ` + ${zipFile.name}` : "";
-    fileHint.textContent = `Ausgewählt: ${jsonFiles.map((f) => f.name).join(", ")}${zipHint}`;
+    fileHint.textContent = `Ausgewählt: Ordner „${folderName}“ mit ${exportJson.name}${zipHint}`;
   };
 
-  jsonInput.addEventListener("change", updateSelectedFileHint);
-  zipInput.addEventListener("change", updateSelectedFileHint);
+  folderInput.addEventListener("change", updateSelectedFileHint);
 
   $("loadFilesBtn").addEventListener("click", async () => {
-    const jsonFiles = Array.from(jsonInput.files || []);
-    const zipFile = (zipInput.files || [])[0] || null;
-    await loadDatasetFromFiles(jsonFiles, zipFile);
+    const folderFiles = Array.from(folderInput.files || []);
+    await loadDatasetFromDirectoryFiles(folderFiles);
   });
 
   $("startSearchBtn").addEventListener("click", async () => {
