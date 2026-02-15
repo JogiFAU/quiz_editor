@@ -2,8 +2,8 @@ import { $, toast } from "../utils.js";
 import { state, resetEditorState } from "../state.js";
 import { loadJsonFiles, syncQuestionToSource, buildDatasetExports } from "../data/loaders.js";
 import { buildImagesZipBlob, clearLocalImageObjectUrls, loadZipFile } from "../data/zipImages.js";
-import { filterByExams, filterByImageMode, searchQuestions } from "../quiz/filters.js";
-import { renderAll, updateExamLists } from "./render.js";
+import { filterByExams, filterByImageMode, filterByTopics, searchQuestions } from "../quiz/filters.js";
+import { refreshHeaderStatus, renderAll, updateExamLists, updateTopicList } from "./render.js";
 
 function selectedExamsFromList() {
   const el = $("examListSearch");
@@ -13,9 +13,44 @@ function selectedExamsFromList() {
     .filter(Boolean);
 }
 
+
+function selectedTopicsFromList() {
+  const el = $("topicListSearch");
+  if (!el) return [];
+  return Array.from(el.querySelectorAll("input[type=checkbox][data-topic-type]:checked"))
+    .map((x) => {
+      if (x.dataset.topicType === "super") return `super::${x.dataset.topicValue || ""}`;
+      return `sub::${x.dataset.parentTopic || ""}::${x.dataset.topicValue || ""}`;
+    })
+    .filter((v) => v !== "super::" && v !== "sub::::");
+}
+
+function syncSuperTopicState(superTopic) {
+  const list = $("topicListSearch");
+  if (!list) return;
+
+  const superCb = list.querySelector(`input[data-topic-type="super"][data-topic-value="${CSS.escape(superTopic)}"]`);
+  if (!superCb) return;
+
+  const childCbs = Array.from(list.querySelectorAll(`input[data-topic-type="sub"][data-parent-topic="${CSS.escape(superTopic)}"]`));
+  if (!childCbs.length) return;
+
+  const checkedCount = childCbs.filter((cb) => cb.checked).length;
+  superCb.indeterminate = checkedCount > 0 && checkedCount < childCbs.length;
+  superCb.checked = checkedCount === childCbs.length;
+}
+
+function syncAllSuperTopicStates() {
+  const list = $("topicListSearch");
+  if (!list) return;
+  const supers = Array.from(list.querySelectorAll('input[data-topic-type="super"]'));
+  supers.forEach((cb) => syncSuperTopicState(cb.dataset.topicValue || ""));
+}
+
 function defaultSearchConfig() {
   return {
     exams: [],
+    topics: [],
     imageFilter: "all",
     query: "",
     inAnswers: false,
@@ -25,6 +60,7 @@ function defaultSearchConfig() {
 function buildSearchConfigFromUi() {
   return {
     exams: selectedExamsFromList(),
+    topics: selectedTopicsFromList(),
     imageFilter: $("imageFilterSearch").value,
     query: $("searchText").value,
     inAnswers: $("searchInAnswers").checked,
@@ -37,17 +73,32 @@ function applySearchConfigToUi(config) {
   $("searchText").value = cfg.query || "";
   $("searchInAnswers").checked = !!cfg.inAnswers;
 
-  const selected = new Set(cfg.exams || []);
-  const list = $("examListSearch");
-  if (!list) return;
-  list.querySelectorAll("input[type=checkbox][data-exam]").forEach((cb) => {
-    cb.checked = selected.has(cb.dataset.exam);
-  });
+  const selectedExams = new Set(cfg.exams || []);
+  const examList = $("examListSearch");
+  if (examList) {
+    examList.querySelectorAll("input[type=checkbox][data-exam]").forEach((cb) => {
+      cb.checked = selectedExams.has(cb.dataset.exam);
+    });
+  }
+
+  const selectedTopics = new Set(cfg.topics || []);
+  const topicList = $("topicListSearch");
+  if (topicList) {
+    topicList.querySelectorAll('input[data-topic-type="super"]').forEach((cb) => {
+      cb.checked = selectedTopics.has(`super::${cb.dataset.topicValue || ""}`);
+      cb.indeterminate = false;
+    });
+    topicList.querySelectorAll('input[data-topic-type="sub"]').forEach((cb) => {
+      cb.checked = selectedTopics.has(`sub::${cb.dataset.parentTopic || ""}::${cb.dataset.topicValue || ""}`);
+    });
+    syncAllSuperTopicStates();
+  }
 }
 
 function computeSearchSubset(config) {
   let qs = state.questionsAll.slice();
   qs = filterByExams(qs, config.exams);
+  qs = filterByTopics(qs, config.topics);
   qs = filterByImageMode(qs, config.imageFilter);
   return searchQuestions(qs, { query: config.query, inAnswers: config.inAnswers });
 }
@@ -338,6 +389,7 @@ async function loadFromResolvedFiles({ exportJsonFile, zipFile, folderName, hand
 
   resetSearchConfig();
   updateExamLists(startConfig.exams || []);
+  updateTopicList(startConfig.topics || []);
   applySearchConfigToUi(startConfig);
   applySnapshotAfterReload(uiSnapshot);
 
@@ -480,6 +532,7 @@ export function wireUiEvents() {
     resetSearchConfig();
     state.searchConfig = defaultSearchConfig();
     updateExamLists([]);
+    updateTopicList([]);
     if (state.activeDataset) {
       state.view = "config";
       state.searchOrder = [];
@@ -527,7 +580,38 @@ export function wireUiEvents() {
     await renderAll();
   });
 
-  $("questionList").addEventListener("input", () => {
-    state.dirty = true;
+  const topicList = $("topicListSearch");
+  if (topicList) {
+    topicList.addEventListener("change", async (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement) || target.type !== "checkbox") return;
+
+      if (target.dataset.topicType === "super") {
+        const superTopic = target.dataset.topicValue || "";
+        topicList
+          .querySelectorAll(`input[data-topic-type="sub"][data-parent-topic="${CSS.escape(superTopic)}"]`)
+          .forEach((subCb) => {
+            subCb.checked = target.checked;
+          });
+        target.indeterminate = false;
+      } else if (target.dataset.topicType === "sub") {
+        syncSuperTopicState(target.dataset.parentTopic || "");
+      }
+
+      if (state.view === "search") {
+        const cfg = buildSearchConfigFromUi();
+        state.searchConfig = cfg;
+        state.searchOrder = computeSearchSubset(cfg).map((q) => q.id);
+      }
+      await renderAll();
+    });
+  }
+
+  const questionList = $("questionList");
+  ["input", "change"].forEach((evt) => {
+    questionList.addEventListener(evt, () => {
+      state.dirty = true;
+      refreshHeaderStatus();
+    });
   });
 }
