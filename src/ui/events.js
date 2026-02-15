@@ -170,7 +170,14 @@ function baseFilenameFromUrl(url) {
 }
 
 function hasFileSystemAccessApi() {
-  return typeof window.showDirectoryPicker === "function";
+  return typeof window !== "undefined" && window.isSecureContext && typeof window.showDirectoryPicker === "function";
+}
+
+function revealManualFallback() {
+  const fallbackDetails = $('manualLoadFallback');
+  if (fallbackDetails instanceof HTMLDetailsElement) {
+    fallbackDetails.open = true;
+  }
 }
 
 function downloadJson(payload, filename) {
@@ -589,12 +596,20 @@ async function loadDatasetFromDirectoryFiles(directoryFiles) {
 
 async function pickAndLoadDirectoryLive() {
   if (!hasFileSystemAccessApi()) {
+    revealManualFallback();
     alert("Live-Bearbeitung ist in diesem Browser nicht verfügbar. Bitte den normalen Ordner-Import nutzen.");
     return;
   }
 
   try {
-    const directoryHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+    let directoryHandle;
+    try {
+      directoryHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+    } catch (error) {
+      if (error?.name !== "TypeError") throw error;
+      directoryHandle = await window.showDirectoryPicker();
+    }
+
     const exportJsonHandle = await directoryHandle.getFileHandle("export.json");
     const exportJsonFile = await exportJsonHandle.getFile();
 
@@ -621,6 +636,7 @@ async function pickAndLoadDirectoryLive() {
     toast("Ordner mit Schreibzugriff geladen (Live-Speichern aktiv).");
   } catch (e) {
     if (e?.name === "AbortError") return;
+    revealManualFallback();
     alert("Fehler beim Live-Laden des Ordners: " + e);
   }
 }
@@ -631,7 +647,10 @@ export function wireUiEvents() {
   const pickFolderBtn = $("pickFolderBtn");
 
   if (pickFolderBtn) {
-    pickFolderBtn.hidden = !hasFileSystemAccessApi();
+    pickFolderBtn.disabled = !hasFileSystemAccessApi();
+    pickFolderBtn.title = hasFileSystemAccessApi()
+      ? ""
+      : "Dieser Browser unterstützt keinen Ordnerzugriff mit Schreibrechten. Nutze die Fallback-Alternative darunter.";
     pickFolderBtn.addEventListener("click", async () => {
       await pickAndLoadDirectoryLive();
     });

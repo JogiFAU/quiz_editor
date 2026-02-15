@@ -34,13 +34,14 @@
 <div class="wrap">
   <aside class="card">
     <h2>1) Dateien laden</h2>
-    <div class="small">Wähle einen Datensatz-Ordner. Erwartet werden <code>export.json</code> und optional <code>images.zip</code>. Für Live-Speichern nutze „Ordner mit Schreibzugriff“ (falls unterstützt).</div>
-    <label for="datasetFolderInput">Datensatz-Ordner</label>
-    <input id="datasetFolderInput" type="file" webkitdirectory directory>
-    <div class="row2" style="margin-top:10px;">
-      <button class="btn primary" id="loadFilesBtn" type="button">Ordner laden</button>
-      <button class="btn" id="pickFolderBtn" type="button" hidden>Ordner mit Schreibzugriff</button>
-    </div>
+    <div class="small">Standard: Datensatz mit Schreibzugriff laden (für Live-Speichern). Fallback nur bei inkompatiblen Browsern oder Zugriffsproblemen.</div>
+    <button class="btn primary" id="pickFolderBtn" type="button" style="margin-top:10px;">Datensatz laden (mit Schreibzugriff)</button>
+    <details class="filterGroup" id="manualLoadFallback" style="margin-top:10px;">
+      <summary>Alternative ohne Schreibzugriff (Fallback)</summary>
+      <label for="datasetFolderInput">Datensatz-Ordner</label>
+      <input id="datasetFolderInput" type="file" webkitdirectory directory>
+      <button class="btn" id="loadFilesBtn" type="button" style="margin-top:10px;">Ordner ohne Schreibzugriff laden</button>
+    </details>
     <div class="small" id="loadedFileHint" style="margin-top:8px;">Noch kein Ordner ausgewählt.</div>
 
     <hr class="sep">
