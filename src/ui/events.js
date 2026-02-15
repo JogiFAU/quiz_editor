@@ -8,6 +8,35 @@ import { startQuizSession, startSearchView, finishQuizSession, abortQuizSession,
 import { renderAll, updateExamLists } from "./render.js";
 import { listSessions, deleteSession, exportBackupAllDatasets, importBackupAllDatasets, getLatestAnsweredResultsByQuestion, clearAllSessionData } from "../data/storage.js";
 
+
+const THEME_STORAGE_KEY = "examgen:theme";
+
+function applyTheme(theme) {
+  const nextTheme = theme === "light" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", nextTheme);
+  localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+
+  const btn = $("themeToggleBtn");
+  if (btn) {
+    const isLight = nextTheme === "light";
+    btn.textContent = isLight ? "🌙" : "☀️";
+    btn.title = isLight ? "Zu Darkmode wechseln" : "Zu Lightmode wechseln";
+    btn.setAttribute("aria-label", btn.title);
+  }
+}
+
+function initThemeToggle() {
+  const btn = $("themeToggleBtn");
+  const stored = localStorage.getItem(THEME_STORAGE_KEY) || "dark";
+  applyTheme(stored);
+
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    const current = document.documentElement.getAttribute("data-theme") || "dark";
+    applyTheme(current === "dark" ? "light" : "dark");
+  });
+}
+
 function selectedExamsFromList(containerId) {
   const el = $(containerId);
   if (!el) return [];
@@ -233,6 +262,7 @@ function resetAllConfigs() {
 
 
 export function wireUiEvents() {
+  initThemeToggle();
   // Tabs
   $("tabQuiz").addEventListener("click", async () => {
     if (state.view === "search") {
