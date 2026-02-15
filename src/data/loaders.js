@@ -1,19 +1,39 @@
 import { normSpace } from "../utils.js";
 import { state } from "../state.js";
 
+function pickFirstKey(keys, preferred = [], matcher = null) {
+  for (const key of preferred) {
+    if (keys.includes(key)) return key;
+  }
+  if (!matcher) return null;
+  return keys.find((k) => matcher.test(k)) || null;
+}
+
 function detectTopicKey(q) {
   const keys = Object.keys(q || {});
-  return keys.find((k) => /topic|thema/i.test(k)) || null;
+  return pickFirstKey(
+    keys,
+    ["topic", "aiTopic"],
+    /topic|thema/i,
+  );
 }
 
 function detectSuperTopicKey(q) {
   const keys = Object.keys(q || {});
-  return keys.find((k) => /super.?topic|ober.?thema|haupt.?thema/i.test(k)) || null;
+  return pickFirstKey(
+    keys,
+    ["aiSuperTopic", "superTopic", "oberThema", "hauptThema"],
+    /super.?topic|ober.?thema|haupt.?thema/i,
+  );
 }
 
 function detectSubTopicKey(q) {
   const keys = Object.keys(q || {});
-  return keys.find((k) => /sub.?topic|unter.?thema/i.test(k)) || null;
+  return pickFirstKey(
+    keys,
+    ["aiSubtopic", "subTopic", "unterThema"],
+    /sub.?topic|unter.?thema/i,
+  );
 }
 
 function detectMaintenanceKey(q) {
