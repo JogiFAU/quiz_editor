@@ -289,27 +289,48 @@ function parseTopicTree(raw) {
   };
 }
 
-async function loadTopicTreeFromFile(file) {
+async function loadTopicTreeFromFile(file, { quiet = false } = {}) {
   if (!file) {
     state.topicCatalog = null;
-    const hint = $("topicTreeHint");
-    if (hint) hint.textContent = "Keine Themenquelle geladen.";
-    await renderAll();
     return;
   }
 
   try {
     const txt = await file.text();
     state.topicCatalog = parseTopicTree(txt);
-    const hint = $("topicTreeHint");
-    if (hint) {
-      hint.textContent = `Geladen: ${file.name} · ${state.topicCatalog.superTopics.length} Überthemen`; 
+    if (!quiet) {
+      toast(`Themenstruktur geladen: ${file.name}`);
     }
-    await renderAll();
-    toast("Themenstruktur geladen.");
   } catch (err) {
-    alert("Themenstruktur konnte nicht gelesen werden. Erwartetes Format: { superTopics: [{ name, subtopics: [] }] }");
+    state.topicCatalog = null;
+    if (!quiet) {
+      alert("Themenstruktur konnte nicht gelesen werden. Erwartetes Format: { superTopics: [{ name, subtopics: [] }] }");
+    }
   }
+}
+
+function findTopicTreeFile(directoryFiles) {
+  const candidates = ["topic-tree.json", "topic_tree.json", "topicTree.json"];
+  const byLower = new Map((directoryFiles || []).map((f) => [String(f.name || "").toLowerCase(), f]));
+  for (const candidate of candidates) {
+    const match = byLower.get(candidate.toLowerCase());
+    if (match) return match;
+  }
+  return null;
+}
+
+async function getTopicTreeFileFromDirectoryHandle(directoryHandle) {
+  const candidates = ["topic-tree.json", "topic_tree.json", "topicTree.json"];
+  for (const candidate of candidates) {
+    try {
+      const handle = await directoryHandle.getFileHandle(candidate);
+      const file = await handle.getFile();
+      return file;
+    } catch {
+      // try next candidate
+    }
+  }
+  return null;
 }
 
 function replaceAcrossQuestion(question, searchText, replaceText) {
@@ -369,10 +390,11 @@ async function applyBulkReplace() {
   toast(`Suchen/Ersetzen auf ${changed} Frage(n) angewendet.`);
 }
 
-async function loadFromResolvedFiles({ exportJsonFile, zipFile, folderName, handles = null, uiSnapshot = null }) {
+async function loadFromResolvedFiles({ exportJsonFile, zipFile, topicTreeFile = null, folderName, handles = null, uiSnapshot = null }) {
   clearLocalImageObjectUrls();
   await loadJsonFiles([exportJsonFile]);
   await loadZipFile(zipFile);
+  await loadTopicTreeFromFile(topicTreeFile, { quiet: true });
 
   state.activeDataset = {
     id: "upload",
@@ -416,10 +438,11 @@ async function loadDatasetFromDirectoryFiles(directoryFiles) {
   }
 
   const zipFile = directoryFiles.find((file) => file.name.toLowerCase() === "images.zip") || null;
+  const topicTreeFile = findTopicTreeFile(directoryFiles);
 
   try {
     const folderName = getFolderNameFromEntry(exportJson);
-    await loadFromResolvedFiles({ exportJsonFile: exportJson, zipFile, folderName });
+    await loadFromResolvedFiles({ exportJsonFile: exportJson, zipFile, topicTreeFile, folderName });
     toast("Ordner geladen.");
   } catch (e) {
     alert("Fehler beim Laden des Ordners: " + e);
@@ -447,9 +470,12 @@ async function pickAndLoadDirectoryLive() {
       zipFile = null;
     }
 
+    const topicTreeFile = await getTopicTreeFileFromDirectoryHandle(directoryHandle);
+
     await loadFromResolvedFiles({
       exportJsonFile,
       zipFile,
+      topicTreeFile,
       folderName: directoryHandle.name || "Ordner",
       handles: { directoryHandle, exportJsonHandle, zipHandle },
     });
@@ -500,14 +526,6 @@ export function wireUiEvents() {
     const folderFiles = Array.from(folderInput.files || []);
     await loadDatasetFromDirectoryFiles(folderFiles);
   });
-
-  const topicTreeInput = $("topicTreeInput");
-  if (topicTreeInput) {
-    topicTreeInput.addEventListener("change", async () => {
-      const file = topicTreeInput.files?.[0] || null;
-      await loadTopicTreeFromFile(file);
-    });
-  }
 
   $("startSearchBtn").addEventListener("click", async () => {
     if (!state.activeDataset) {
