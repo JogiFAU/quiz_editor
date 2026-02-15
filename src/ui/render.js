@@ -10,7 +10,7 @@ function setHeader() {
   const bar = $("headerProgressBar");
 
   if (!state.activeDataset) {
-    subtitle.textContent = "Datensatz laden und Bearbeitung konfigurieren";
+    subtitle.textContent = "Dateien laden und Bearbeitung konfigurieren";
     progressText.textContent = "—";
     rightStat.textContent = "—";
     bar.style.width = "0%";

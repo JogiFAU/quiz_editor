@@ -1,8 +1,7 @@
 import { $, toast } from "../utils.js";
 import { state, resetEditorState } from "../state.js";
-import { loadJsonUrls, syncQuestionToSource, buildDatasetExports } from "../data/loaders.js";
-import { loadZipUrl } from "../data/zipImages.js";
-import { getSelectedDataset } from "../data/manifest.js";
+import { loadJsonFiles, syncQuestionToSource, buildDatasetExports } from "../data/loaders.js";
+import { loadZipFile } from "../data/zipImages.js";
 import { filterByExams, filterByImageMode, searchQuestions } from "../quiz/filters.js";
 import { renderAll, updateExamLists } from "./render.js";
 
@@ -82,37 +81,69 @@ function saveAsCopyDownload() {
   toast("Bearbeitete Kopie heruntergeladen.");
 }
 
-async function loadDatasetFromManifest(autoToast = false) {
-  const d = getSelectedDataset();
-  if (!d) {
-    alert("Kein Datensatz gefunden (manifest.json).");
+async function loadDatasetFromFiles(jsonFiles, zipFile = null) {
+  if (!jsonFiles.length) {
+    alert("Bitte mindestens eine JSON-Datei auswählen.");
     return;
   }
 
   try {
-    const jsonUrls = Array.isArray(d.json) ? d.json : [d.json];
-    await loadJsonUrls(jsonUrls);
-    await loadZipUrl(d.zip || null);
+    await loadJsonFiles(jsonFiles);
+    await loadZipFile(zipFile);
 
-    state.activeDataset = { ...d };
+    const label = jsonFiles.length === 1
+      ? jsonFiles[0].name
+      : `${jsonFiles.length} Dateien`;
+
+    state.activeDataset = { id: "upload", label };
     resetEditorState();
     updateExamLists();
     resetSearchConfig();
     await renderAll();
-    if (autoToast) toast("Datensatz geladen.");
+
+    const fileHint = $("loadedFileHint");
+    if (fileHint) {
+      const zipHint = zipFile ? ` + ${zipFile.name}` : "";
+      fileHint.textContent = `Geladen: ${jsonFiles.map((f) => f.name).join(", ")}${zipHint}`;
+    }
+
+    toast("Dateien geladen.");
   } catch (e) {
-    alert("Fehler beim Laden des Datensatzes: " + e);
+    alert("Fehler beim Laden der Dateien: " + e);
   }
 }
 
 export function wireUiEvents() {
-  $("loadDatasetBtn").addEventListener("click", async () => {
-    await loadDatasetFromManifest(true);
+  const jsonInput = $("jsonFileInput");
+  const zipInput = $("zipFileInput");
+
+  const updateSelectedFileHint = () => {
+    const jsonFiles = Array.from(jsonInput.files || []);
+    const zipFile = (zipInput.files || [])[0] || null;
+    const fileHint = $("loadedFileHint");
+    if (!fileHint) return;
+
+    if (!jsonFiles.length) {
+      fileHint.textContent = "Noch keine Datei ausgewählt.";
+      return;
+    }
+
+    const zipHint = zipFile ? ` + ${zipFile.name}` : "";
+    fileHint.textContent = `Ausgewählt: ${jsonFiles.map((f) => f.name).join(", ")}${zipHint}`;
+  };
+
+  jsonInput.addEventListener("change", updateSelectedFileHint);
+  zipInput.addEventListener("change", updateSelectedFileHint);
+
+  $("loadFilesBtn").addEventListener("click", async () => {
+    const jsonFiles = Array.from(jsonInput.files || []);
+    const zipFile = (zipInput.files || [])[0] || null;
+    await loadDatasetFromFiles(jsonFiles, zipFile);
   });
 
   $("startSearchBtn").addEventListener("click", async () => {
     if (!state.activeDataset) {
-      alert("Bitte zuerst einen Datensatz laden.");
+      alert("Bitte zuerst JSON-Datei(en) laden.");
       return;
     }
 

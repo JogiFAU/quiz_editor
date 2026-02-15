@@ -1,9 +1,7 @@
 export const state = {
   questionsAll: [],
   activeDataset: null,
-  manifest: null,
-
-  // Original JSON files loaded from manifest (for saving exports)
+  // Original JSON files loaded from file upload (for saving exports)
   datasetFiles: [], // [{ url, payload }]
 
   // ZIP for images

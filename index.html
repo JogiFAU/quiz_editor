@@ -12,7 +12,7 @@
 <header class="top">
   <div class="top__left">
     <div class="top__title">Fragen-Editor</div>
-    <div class="top__subtitle" id="headerSubtitle">Datensatz laden und Bearbeitung konfigurieren</div>
+    <div class="top__subtitle" id="headerSubtitle">Dateien laden und Bearbeitung konfigurieren</div>
   </div>
   <div class="top__right">
     <div class="top__stats">
@@ -33,12 +33,16 @@
 
 <div class="wrap">
   <aside class="card">
-    <h2>1) Datensatz laden</h2>
-    <label for="datasetSelect">Datensatz</label>
-    <div class="row">
-      <select id="datasetSelect"></select>
-      <button class="btn primary" id="loadDatasetBtn">Laden</button>
+    <h2>1) Dateien laden</h2>
+    <div class="small">Lade eine oder mehrere <code>export.json</code>-Dateien per Browserdialog.</div>
+    <label for="jsonFileInput">JSON-Datei(en)</label>
+    <input id="jsonFileInput" type="file" accept="application/json,.json" multiple>
+    <label for="zipFileInput">Bilder-ZIP (optional)</label>
+    <input id="zipFileInput" type="file" accept="application/zip,.zip">
+    <div class="row2" style="margin-top:10px;">
+      <button class="btn primary" id="loadFilesBtn" type="button">Dateien laden</button>
     </div>
+    <div class="small" id="loadedFileHint" style="margin-top:8px;">Noch keine Datei ausgewählt.</div>
 
     <hr class="sep">
 
@@ -69,7 +73,7 @@
     <hr class="sep">
 
     <h2>3) Speichern</h2>
-    <div class="small">Hinweis: Auf GitHub Pages kann die Ursprungsdatei nicht direkt überschrieben werden. Stattdessen werden bearbeitete JSON-Dateien heruntergeladen.</div>
+    <div class="small">Hinweis: Browser-Apps können Originaldateien nicht direkt überschreiben. Beim Speichern wird ein Download gestartet.</div>
     <div class="row2" style="margin-top:10px;">
       <button class="btn primary" id="saveOriginalBtn" type="button">Mit Original-Dateinamen speichern</button>
       <button class="btn" id="saveCopyBtn" type="button">Als Kopie speichern</button>

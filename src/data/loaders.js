@@ -93,6 +93,27 @@ export async function loadJsonUrls(urls) {
   state.questionsAll = Array.from(byId.values());
 }
 
+
+export async function loadJsonFiles(files) {
+  const byId = new Map();
+  state.datasetFiles = [];
+
+  for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
+    const file = files[fileIndex];
+    const txt = await file.text();
+    const payload = JSON.parse(txt);
+    state.datasetFiles.push({ url: file.name, payload });
+
+    for (const q of payload.questions || []) {
+      const nq = normalizeQuestion(q, fileIndex);
+      if (!nq) continue;
+      byId.set(nq.id, nq);
+    }
+  }
+
+  state.questionsAll = Array.from(byId.values());
+}
+
 export function buildDatasetExports() {
   return state.datasetFiles.map((entry) => ({
     url: entry.url,
