@@ -294,6 +294,19 @@ summary { cursor: pointer; color: var(--muted); }
   font-weight: 700;
 }
 
+.filterGroup {
+  margin: 10px 0;
+}
+.filterGroup summary {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.filterGroup[open] summary {
+  margin-bottom: 8px;
+}
+
 /* Exam list */
 .examlist {
   border: 1px solid var(--border);

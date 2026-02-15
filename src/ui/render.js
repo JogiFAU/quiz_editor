@@ -21,8 +21,13 @@ function setHeader() {
   const shown = state.view === "search" ? state.searchOrder.length : 0;
   subtitle.textContent = `${state.activeDataset.label || state.activeDataset.id} · Editor`;
   progressText.textContent = `${shown}/${total}`;
-  rightStat.textContent = state.dirty ? "ungespeichert" : "gespeichert";
+  rightStat.textContent = state.dirty ? "Ungespeichert" : "Gespeichert";
   bar.style.width = total ? `${(shown / total) * 100}%` : "0%";
+}
+
+
+export function refreshHeaderStatus() {
+  setHeader();
 }
 
 export function updateExamLists(selectedExams = []) {

@@ -3,7 +3,7 @@ import { state, resetEditorState } from "../state.js";
 import { loadJsonFiles, syncQuestionToSource, buildDatasetExports } from "../data/loaders.js";
 import { buildImagesZipBlob, clearLocalImageObjectUrls, loadZipFile } from "../data/zipImages.js";
 import { filterByExams, filterByImageMode, filterByTopics, searchQuestions } from "../quiz/filters.js";
-import { renderAll, updateExamLists, updateTopicList } from "./render.js";
+import { refreshHeaderStatus, renderAll, updateExamLists, updateTopicList } from "./render.js";
 
 function selectedExamsFromList() {
   const el = $("examListSearch");
@@ -607,7 +607,11 @@ export function wireUiEvents() {
     });
   }
 
-  $("questionList").addEventListener("input", () => {
-    state.dirty = true;
+  const questionList = $("questionList");
+  ["input", "change"].forEach((evt) => {
+    questionList.addEventListener(evt, () => {
+      state.dirty = true;
+      refreshHeaderStatus();
+    });
   });
 }
