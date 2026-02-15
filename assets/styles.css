@@ -538,3 +538,21 @@ summary { cursor: pointer; color: var(--muted); }
 }
 .sumcard__k{ font-size: 12px; opacity:.78; margin-bottom: 6px; font-weight: 800; }
 .sumcard__v{ font-size: 18px; font-weight: 900; letter-spacing:.2px; }
+
+textarea {
+  width: 100%;
+  min-height: 90px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel2);
+  color: var(--text);
+}
+
+.editorField { margin-top: 10px; }
+.editorAnswer {
+  grid-template-columns: 24px 1fr auto;
+  gap: 8px;
+  align-items: start;
+}
+.editorAnswer textarea { min-height: 64px; }
