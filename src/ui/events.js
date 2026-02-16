@@ -180,6 +180,13 @@ function revealManualFallback() {
   }
 }
 
+function openManualFolderPicker() {
+  const folderInput = $("datasetFolderInput");
+  if (folderInput instanceof HTMLInputElement) {
+    folderInput.click();
+  }
+}
+
 function downloadJson(payload, filename) {
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   downloadBlob(blob, filename);
@@ -597,13 +604,8 @@ async function loadDatasetFromDirectoryFiles(directoryFiles) {
 async function pickAndLoadDirectoryLive() {
   if (!hasFileSystemAccessApi()) {
     revealManualFallback();
-    alert("Live-Bearbeitung ist in diesem Browser nicht verfügbar. Bitte den normalen Ordner-Import nutzen.");
-    return;
-  }
-
-  if (!window.isSecureContext) {
-    revealManualFallback();
-    alert("Live-Bearbeitung benötigt einen sicheren Kontext (https oder localhost). Bitte per https/localhost öffnen oder den Fallback nutzen.");
+    toast("Live-Ordnerzugriff nicht verfügbar – Fallback ohne Schreibzugriff geöffnet.");
+    openManualFolderPicker();
     return;
   }
 
@@ -643,6 +645,7 @@ async function pickAndLoadDirectoryLive() {
   } catch (e) {
     if (e?.name === "AbortError") return;
     revealManualFallback();
+    toast("Live-Laden fehlgeschlagen – bitte Fallback ohne Schreibzugriff nutzen.");
     alert("Fehler beim Live-Laden des Ordners: " + e);
   }
 }
