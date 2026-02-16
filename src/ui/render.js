@@ -226,36 +226,68 @@ function createImageEditor(question) {
   return wrap;
 }
 
-function ensureDatalist(id, options = []) {
-  let list = document.getElementById(id);
-  if (!list) {
-    list = document.createElement("datalist");
-    list.id = id;
-    document.body.appendChild(list);
-  }
-  list.innerHTML = "";
-  options.forEach((opt) => {
-    const o = document.createElement("option");
-    o.value = opt;
-    list.appendChild(o);
+function createSuggestionDropdown(input, getOptions, onChoose) {
+  const wrap = input.closest("label");
+  if (!wrap) return;
+
+  const dropdown = document.createElement("div");
+  dropdown.className = "editorTopicDropdown";
+  dropdown.hidden = true;
+  wrap.appendChild(dropdown);
+
+  const renderOptions = () => {
+    const options = getOptions(input.value);
+    if (!options.length) {
+      dropdown.hidden = true;
+      dropdown.innerHTML = "";
+      return;
+    }
+
+    dropdown.innerHTML = "";
+    options.slice(0, 10).forEach((opt) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "editorTopicDropdown__item";
+      btn.textContent = opt;
+      btn.addEventListener("click", () => {
+        onChoose(opt);
+        dropdown.hidden = true;
+      });
+      dropdown.appendChild(btn);
+    });
+    dropdown.hidden = false;
+  };
+
+  input.addEventListener("focus", renderOptions);
+  input.addEventListener("input", renderOptions);
+  input.addEventListener("blur", () => {
+    window.setTimeout(() => {
+      dropdown.hidden = true;
+    }, 120);
   });
 }
 
 function updateTopicHints(question, overInput, underInput) {
   const catalog = state.topicCatalog;
   const over = catalog?.superTopics || [];
-  ensureDatalist("superTopicOptions", over);
 
   const selectedOver = overInput?.value || question.superTopic || "";
   const under = selectedOver && catalog?.subTopicsBySuper?.[selectedOver]
     ? catalog.subTopicsBySuper[selectedOver]
     : catalog?.allSubTopics || [];
-  ensureDatalist("subTopicOptions", under);
+  return { over, under };
+}
 
-  if (underInput && underInput.value && !under.includes(underInput.value) && selectedOver) {
-    // preserve free text, but keep input list in sync for next edits
-    underInput.setAttribute("list", "subTopicOptions");
-  }
+function normalizeTopicValue(value, allowedValues = []) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "";
+  return allowedValues.includes(normalized) ? normalized : "";
+}
+
+function filterTopicOptions(options = [], typedValue = "") {
+  const needle = String(typedValue || "").trim().toLocaleLowerCase("de");
+  if (!needle) return options;
+  return options.filter((opt) => String(opt).toLocaleLowerCase("de").includes(needle));
 }
 
 export async function renderMain() {
@@ -300,16 +332,7 @@ export async function renderMain() {
     `;
     card.appendChild(h);
 
-    const aiInfo = document.createElement("div");
-    aiInfo.className = "small";
-    aiInfo.style.marginTop = "4px";
-    aiInfo.innerHTML = `
-      <div><strong>AI-Begründung Topic:</strong> ${q.topicReason || "—"}</div>
-      <div><strong>AI-Begründung Antwort:</strong> ${q.answerReason || "—"}</div>
-    `;
-    card.appendChild(aiInfo);
-
-    const addField = (label, value, onChange, type = "text", options = {}) => {
+    const addField = (label, value, onChange, type = "text") => {
       const wrap = document.createElement("label");
       wrap.className = "editorField";
       const ttl = document.createElement("div");
@@ -318,7 +341,6 @@ export async function renderMain() {
 
       const inp = document.createElement(type === "textarea" ? "textarea" : "input");
       if (type !== "textarea") inp.type = "text";
-      if (options.listId) inp.setAttribute("list", options.listId);
       inp.value = value || "";
       inp.addEventListener("input", () => {
         onChange(inp.value, inp);
@@ -338,14 +360,55 @@ export async function renderMain() {
       q.superTopic = v;
       q.topic = [q.superTopic, q.subTopic].filter(Boolean).join(" > ");
       updateTopicHints(q, superTopicInput, subTopicInput);
-    }, "text", { listId: "superTopicOptions" });
+    }, "text");
 
     const subTopicInput = addField("Unterthema", q.subTopic, (v) => {
       q.subTopic = v;
       q.topic = [q.superTopic, q.subTopic].filter(Boolean).join(" > ");
-    }, "text", { listId: "subTopicOptions" });
+    }, "text");
 
-    updateTopicHints(q, superTopicInput, subTopicInput);
+    const applyTopicValue = (input, value) => {
+      input.value = value;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+
+    createSuggestionDropdown(
+      superTopicInput,
+      (typed) => {
+        const { over } = updateTopicHints(q, superTopicInput, subTopicInput);
+        return filterTopicOptions(over, typed);
+      },
+      (value) => applyTopicValue(superTopicInput, value),
+    );
+
+    createSuggestionDropdown(
+      subTopicInput,
+      (typed) => {
+        const { under } = updateTopicHints(q, superTopicInput, subTopicInput);
+        return filterTopicOptions(under, typed);
+      },
+      (value) => applyTopicValue(subTopicInput, value),
+    );
+
+    const validateTopics = () => {
+      const { over, under } = updateTopicHints(q, superTopicInput, subTopicInput);
+      const normalizedSuper = normalizeTopicValue(superTopicInput.value, over);
+      if (normalizedSuper !== superTopicInput.value) applyTopicValue(superTopicInput, normalizedSuper);
+
+      const relevantUnder = normalizedSuper && state.topicCatalog?.subTopicsBySuper?.[normalizedSuper]
+        ? state.topicCatalog.subTopicsBySuper[normalizedSuper]
+        : under;
+      const normalizedSub = normalizeTopicValue(subTopicInput.value, relevantUnder);
+      if (normalizedSub !== subTopicInput.value) applyTopicValue(subTopicInput, normalizedSub);
+    };
+
+    superTopicInput.addEventListener("blur", validateTopics);
+    subTopicInput.addEventListener("blur", validateTopics);
+
+    const topicReason = document.createElement("div");
+    topicReason.className = "small editorField";
+    topicReason.innerHTML = `<strong>AI-Begründung Topic:</strong> ${q.topicReason || "—"}`;
+    card.appendChild(topicReason);
 
     const reviewWrap = document.createElement("label");
     reviewWrap.className = "checkrow editorField";
@@ -414,6 +477,12 @@ export async function renderMain() {
     });
 
     card.appendChild(ansWrap);
+
+    const answerReason = document.createElement("div");
+    answerReason.className = "small editorField";
+    answerReason.innerHTML = `<strong>AI-Begründung Antwort:</strong> ${q.answerReason || "—"}`;
+    card.appendChild(answerReason);
+
     card.appendChild(addAnswerBtn);
     card.appendChild(createImageEditor(q));
 

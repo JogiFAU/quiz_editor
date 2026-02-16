@@ -572,6 +572,29 @@ textarea {
 }
 
 .editorField { margin-top: 10px; }
+.editorTopicDropdown {
+  margin-top: 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel2);
+  max-height: 180px;
+  overflow: auto;
+  display: grid;
+}
+
+.editorTopicDropdown__item {
+  text-align: left;
+  border: 0;
+  border-bottom: 1px solid rgba(122, 162, 255, 0.12);
+  background: transparent;
+  color: var(--text);
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.editorTopicDropdown__item:last-child { border-bottom: 0; }
+.editorTopicDropdown__item:hover { background: rgba(122, 162, 255, 0.18); }
+
 .editorAnswer {
   grid-template-columns: 24px 1fr auto;
   gap: 8px;

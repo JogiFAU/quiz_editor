@@ -227,6 +227,23 @@ async function writeBlobToHandle(fileHandle, blob) {
 }
 
 function syncAllQuestions() {
+  if (state.topicCatalog) {
+    const allowedSuper = new Set(state.topicCatalog.superTopics || []);
+    const allSubs = new Set(state.topicCatalog.allSubTopics || []);
+
+    state.questionsAll.forEach((q) => {
+      const normalizedSuper = String(q.superTopic || "").trim();
+      q.superTopic = allowedSuper.has(normalizedSuper) ? normalizedSuper : "";
+
+      const allowedSubs = q.superTopic
+        ? new Set(state.topicCatalog.subTopicsBySuper?.[q.superTopic] || [])
+        : allSubs;
+      const normalizedSub = String(q.subTopic || "").trim();
+      q.subTopic = allowedSubs.has(normalizedSub) ? normalizedSub : "";
+      q.topic = [q.superTopic, q.subTopic].filter(Boolean).join(" > ");
+    });
+  }
+
   for (const q of state.questionsAll) syncQuestionToSource(q);
 }
 
