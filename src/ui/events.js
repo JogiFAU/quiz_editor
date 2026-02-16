@@ -180,14 +180,27 @@ function revealManualFallback() {
   }
 }
 
-let pendingManualLoadFromPrimary = false;
+function openTemporaryDirectoryPickerAndLoad() {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.multiple = true;
+  input.setAttribute("webkitdirectory", "");
+  input.setAttribute("directory", "");
+  input.style.position = "fixed";
+  input.style.left = "-9999px";
+  input.style.top = "0";
 
-function openManualFolderPicker({ autoLoad = false } = {}) {
-  const folderInput = $("datasetFolderInput");
-  if (!(folderInput instanceof HTMLInputElement)) return false;
+  const cleanup = () => input.remove();
 
-  pendingManualLoadFromPrimary = autoLoad;
-  folderInput.click();
+  input.addEventListener("change", async () => {
+    const files = Array.from(input.files || []);
+    cleanup();
+    if (!files.length) return;
+    await loadDatasetFromDirectoryFiles(files);
+  }, { once: true });
+
+  document.body.appendChild(input);
+  input.click();
   return true;
 }
 
@@ -610,7 +623,7 @@ async function pickAndLoadDirectoryLive() {
     revealManualFallback();
     toast("Live-Ordnerzugriff nicht verfügbar – Fallback ohne Schreibzugriff geöffnet.");
     alert("Dieser Browser unterstützt keinen Ordnerzugriff mit Schreibrechten. Es wird der Fallback-Dialog geöffnet.");
-    const opened = openManualFolderPicker({ autoLoad: true });
+    const opened = openTemporaryDirectoryPickerAndLoad();
     if (!opened) {
       alert("Fallback-Dateiauswahl konnte nicht geöffnet werden. Bitte im Bereich 'Alternative ohne Schreibzugriff' den Ordner manuell wählen.");
     }
@@ -698,15 +711,7 @@ export function wireUiEvents() {
     fileHint.textContent = `Ausgewählt: Ordner „${folderName}“ mit ${exportJson.name}${zipHint}`;
   };
 
-  folderInput.addEventListener("change", async () => {
-    updateSelectedFileHint();
-
-    if (!pendingManualLoadFromPrimary) return;
-    pendingManualLoadFromPrimary = false;
-
-    const folderFiles = Array.from(folderInput.files || []);
-    await loadDatasetFromDirectoryFiles(folderFiles);
-  });
+  folderInput.addEventListener("change", updateSelectedFileHint);
 
   $("loadFilesBtn").addEventListener("click", async () => {
     const folderFiles = Array.from(folderInput.files || []);
