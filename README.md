@@ -15,7 +15,7 @@ Statische Web-App (GitHub Pages), ohne Build.
 
 Beispiel für Themenstruktur: `datasets/topic-tree.example.json`
 ```json
-{
+{ "subject": "Fach",
   "superTopics": [
     { "name": "Überthema", "subtopics": ["Unterthema A", "Unterthema B"] }
   ]
