@@ -184,12 +184,11 @@ let pendingManualLoadFromPrimary = false;
 
 function openManualFolderPicker({ autoLoad = false } = {}) {
   const folderInput = $("datasetFolderInput");
-  if (!(folderInput instanceof HTMLInputElement)) return;
+  if (!(folderInput instanceof HTMLInputElement)) return false;
 
   pendingManualLoadFromPrimary = autoLoad;
-  requestAnimationFrame(() => {
-    folderInput.click();
-  });
+  folderInput.click();
+  return true;
 }
 
 function downloadJson(payload, filename) {
@@ -611,7 +610,10 @@ async function pickAndLoadDirectoryLive() {
     revealManualFallback();
     toast("Live-Ordnerzugriff nicht verfügbar – Fallback ohne Schreibzugriff geöffnet.");
     alert("Dieser Browser unterstützt keinen Ordnerzugriff mit Schreibrechten. Es wird der Fallback-Dialog geöffnet.");
-    openManualFolderPicker({ autoLoad: true });
+    const opened = openManualFolderPicker({ autoLoad: true });
+    if (!opened) {
+      alert("Fallback-Dateiauswahl konnte nicht geöffnet werden. Bitte im Bereich 'Alternative ohne Schreibzugriff' den Ordner manuell wählen.");
+    }
     return;
   }
 
@@ -651,9 +653,8 @@ async function pickAndLoadDirectoryLive() {
   } catch (e) {
     if (e?.name === "AbortError") return;
     revealManualFallback();
-    toast("Live-Laden fehlgeschlagen – Fallback ohne Schreibzugriff wird geöffnet.");
-    alert("Fehler beim Live-Laden des Ordners. Es wird auf den Fallback gewechselt.\n\nDetails: " + e);
-    openManualFolderPicker({ autoLoad: true });
+    toast("Live-Laden fehlgeschlagen – bitte Fallback ohne Schreibzugriff nutzen.");
+    alert("Fehler beim Live-Laden des Ordners. Bitte unten den Fallback 'Alternative ohne Schreibzugriff' verwenden.\n\nDetails: " + e);
   }
 }
 
