@@ -227,6 +227,22 @@ async function writeBlobToHandle(fileHandle, blob) {
 }
 
 function syncAllQuestions() {
+  if (state.topicCatalog) {
+    const allowedSuper = state.topicCatalog.superTopics || [];
+    const allSubs = state.topicCatalog.allSubTopics || [];
+
+    state.questionsAll.forEach((q) => {
+      const normalizedSuper = pickCanonicalTopic(q.superTopic, allowedSuper);
+      q.superTopic = normalizedSuper;
+
+      const allowedSubs = q.superTopic
+        ? (state.topicCatalog.subTopicsBySuper?.[q.superTopic] || [])
+        : allSubs;
+      q.subTopic = pickCanonicalTopic(q.subTopic, allowedSubs);
+      q.topic = [q.superTopic, q.subTopic].filter(Boolean).join(" > ");
+    });
+  }
+
   for (const q of state.questionsAll) syncQuestionToSource(q);
 }
 
@@ -343,8 +359,49 @@ function getFolderNameFromEntry(file) {
   return seg.length > 1 ? seg[0] : "Ordner";
 }
 
+function normalizeTopicToken(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase("de");
+}
+
+function pickCanonicalTopic(value, allowedValues = []) {
+  const token = normalizeTopicToken(value);
+  if (!token) return "";
+  const match = allowedValues.find((entry) => normalizeTopicToken(entry) === token);
+  return match || "";
+}
+
+function getObjectValueByKeys(node, keyVariants = []) {
+  if (!node || typeof node !== "object" || Array.isArray(node)) return undefined;
+
+  const normalizeObjectKeyToken = (value) => normalizeTopicToken(value)
+    .replace(/ä/g, "ae")
+    .replace(/ö/g, "oe")
+    .replace(/ü/g, "ue")
+    .replace(/ß/g, "ss")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+
+  const keyMap = new Map(
+    Object.keys(node).map((key) => [
+      normalizeObjectKeyToken(key),
+      node[key],
+    ]),
+  );
+
+  for (const variant of keyVariants) {
+    const normVariant = normalizeObjectKeyToken(variant);
+    if (keyMap.has(normVariant)) return keyMap.get(normVariant);
+  }
+  return undefined;
+}
+
 function parseTopicTree(raw) {
-  const source = typeof raw === "string" ? JSON.parse(raw) : raw;
+  const parseInput = typeof raw === "string" ? raw.replace(/^\uFEFF/, "") : raw;
+  const source = typeof parseInput === "string" ? JSON.parse(parseInput) : parseInput;
   const superTopics = [];
   const allSubTopics = new Set();
   const subTopicsBySuper = {};
@@ -376,28 +433,71 @@ function parseTopicTree(raw) {
       return;
     }
 
-    const name = String(node.name || node.superTopic || node.title || "").trim();
+    const name = String(
+      getObjectValueByKeys(node, [
+        "name", "title", "label",
+        "superTopic", "super_topic", "superThema", "oberThema", "hauptThema", "ueberthema", "topic",
+      ]) || "",
+    ).trim();
     const superName = name || currentSuper;
 
     if (superName && !currentSuper) {
       pushNode(superName);
     }
 
-    const candidates = [node.subtopics, node.subTopics, node.children, node.topics];
+    const candidates = [
+      getObjectValueByKeys(node, [
+        "subtopics", "subTopics", "sub_themes", "subThemen", "unterthemen", "unterThemen",
+        "children", "topics",
+      ]),
+      node.subtopics,
+      node.subTopics,
+      node.children,
+      node.topics,
+    ];
     const firstArray = candidates.find((x) => Array.isArray(x));
     if (firstArray) {
       firstArray.forEach((child) => walk(child, superName));
     }
 
-    const explicitSub = String(node.subtopic || node.subTopic || "").trim();
+    const explicitSub = String(
+      getObjectValueByKeys(node, [
+        "subtopic", "subTopic", "sub_theme", "unterthema", "unterThema", "child", "sub",
+      ]) || "",
+    ).trim();
     if (explicitSub && superName) {
       pushNode(superName, explicitSub);
     }
+
+    const canInterpretAsMap = !name && !firstArray && !explicitSub;
+    if (canInterpretAsMap) {
+      Object.entries(node).forEach(([key, value]) => {
+        const superFromMap = String(key || "").trim();
+        if (!superFromMap) return;
+
+        if (Array.isArray(value)) {
+          pushNode(superFromMap);
+          value.forEach((entry) => walk(entry, superFromMap));
+          return;
+        }
+
+        if (typeof value === "string") {
+          pushNode(superFromMap, value);
+          return;
+        }
+
+        if (value && typeof value === "object") {
+          pushNode(superFromMap);
+          walk(value, superFromMap);
+        }
+      });
+    }
   };
 
-  const roots = Array.isArray(source?.superTopics)
-    ? source.superTopics
-    : (Array.isArray(source?.topics) ? source.topics : source);
+  const rootCandidate = getObjectValueByKeys(source, [
+    "superTopics", "super_topics", "topics", "themen", "topicTree", "topic_tree",
+  ]);
+  const roots = rootCandidate ?? source;
   walk(roots, "");
 
   return {
@@ -418,9 +518,14 @@ async function loadTopicTreeFromFile(file, { quiet = false } = {}) {
 
   try {
     const txt = await file.text();
-    state.topicCatalog = parseTopicTree(txt);
+    const parsed = parseTopicTree(txt);
+    state.topicCatalog = parsed.superTopics.length ? parsed : null;
     if (!quiet) {
-      toast(`Themenstruktur geladen: ${file.name}`);
+      if (state.topicCatalog) {
+        toast(`Themenstruktur geladen: ${file.name}`);
+      } else {
+        alert("Themenstruktur wurde gefunden, enthält aber keine erkennbaren Über-/Unterthemen.");
+      }
     }
   } catch (err) {
     state.topicCatalog = null;
@@ -431,18 +536,24 @@ async function loadTopicTreeFromFile(file, { quiet = false } = {}) {
 }
 
 function findTopicTreeFile(directoryFiles) {
-  const candidates = ["topic-tree.json", "topic_tree.json", "topicTree.json"];
+  const candidates = [
+    "topic-tree.json", "topic_tree.json", "topicTree.json",
+    "themen-tree.json", "themenbaum.json", "topics.json",
+  ];
   const files = directoryFiles || [];
   const byLower = new Map(files.map((f) => [String(f.name || "").toLowerCase(), f]));
   for (const candidate of candidates) {
     const match = byLower.get(candidate.toLowerCase());
     if (match) return match;
   }
-  return files.find((file) => /topic[-_]?tree.*\.json$/i.test(String(file?.name || ""))) || null;
+  return files.find((file) => /(topic|themen?)[-_]?(tree|baum).*\.json$/i.test(String(file?.name || ""))) || null;
 }
 
 async function getTopicTreeFileFromDirectoryHandle(directoryHandle) {
-  const candidates = ["topic-tree.json", "topic_tree.json", "topicTree.json"];
+  const candidates = [
+    "topic-tree.json", "topic_tree.json", "topicTree.json",
+    "themen-tree.json", "themenbaum.json", "topics.json",
+  ];
   for (const candidate of candidates) {
     try {
       const handle = await directoryHandle.getFileHandle(candidate);
@@ -455,7 +566,7 @@ async function getTopicTreeFileFromDirectoryHandle(directoryHandle) {
 
   try {
     for await (const handle of directoryHandle.values()) {
-      if (handle.kind === "file" && /topic[-_]?tree.*\.json$/i.test(handle.name)) {
+      if (handle.kind === "file" && /(topic|themen?)[-_]?(tree|baum).*\.json$/i.test(handle.name)) {
         return await handle.getFile();
       }
     }
@@ -525,6 +636,7 @@ async function applyBulkReplace() {
 
 async function loadFromResolvedFiles({ exportJsonFile, zipFile, topicTreeFile = null, folderName, handles = null, uiSnapshot = null }) {
   clearLocalImageObjectUrls();
+  resetEditorState();
   await loadJsonFiles([exportJsonFile]);
   await loadZipFile(zipFile);
   await loadTopicTreeFromFile(topicTreeFile, { quiet: true });
@@ -538,7 +650,6 @@ async function loadFromResolvedFiles({ exportJsonFile, zipFile, topicTreeFile = 
     zipHandle: handles?.zipHandle || null,
   };
 
-  resetEditorState();
   const startConfig = uiSnapshot?.searchConfig || defaultSearchConfig();
   state.searchConfig = startConfig;
 

@@ -29,5 +29,4 @@ export function resetEditorState() {
   state.searchConfig = null;
   state.searchOrder = [];
   state.dirty = false;
-  state.topicCatalog = null;
 }
