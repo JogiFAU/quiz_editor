@@ -636,6 +636,7 @@ async function applyBulkReplace() {
 
 async function loadFromResolvedFiles({ exportJsonFile, zipFile, topicTreeFile = null, folderName, handles = null, uiSnapshot = null }) {
   clearLocalImageObjectUrls();
+  resetEditorState();
   await loadJsonFiles([exportJsonFile]);
   await loadZipFile(zipFile);
   await loadTopicTreeFromFile(topicTreeFile, { quiet: true });
@@ -649,7 +650,6 @@ async function loadFromResolvedFiles({ exportJsonFile, zipFile, topicTreeFile = 
     zipHandle: handles?.zipHandle || null,
   };
 
-  resetEditorState();
   const startConfig = uiSnapshot?.searchConfig || defaultSearchConfig();
   state.searchConfig = startConfig;
 
