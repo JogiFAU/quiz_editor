@@ -228,18 +228,17 @@ async function writeBlobToHandle(fileHandle, blob) {
 
 function syncAllQuestions() {
   if (state.topicCatalog) {
-    const allowedSuper = new Set(state.topicCatalog.superTopics || []);
-    const allSubs = new Set(state.topicCatalog.allSubTopics || []);
+    const allowedSuper = state.topicCatalog.superTopics || [];
+    const allSubs = state.topicCatalog.allSubTopics || [];
 
     state.questionsAll.forEach((q) => {
-      const normalizedSuper = String(q.superTopic || "").trim();
-      q.superTopic = allowedSuper.has(normalizedSuper) ? normalizedSuper : "";
+      const normalizedSuper = pickCanonicalTopic(q.superTopic, allowedSuper);
+      q.superTopic = normalizedSuper;
 
       const allowedSubs = q.superTopic
-        ? new Set(state.topicCatalog.subTopicsBySuper?.[q.superTopic] || [])
+        ? (state.topicCatalog.subTopicsBySuper?.[q.superTopic] || [])
         : allSubs;
-      const normalizedSub = String(q.subTopic || "").trim();
-      q.subTopic = allowedSubs.has(normalizedSub) ? normalizedSub : "";
+      q.subTopic = pickCanonicalTopic(q.subTopic, allowedSubs);
       q.topic = [q.superTopic, q.subTopic].filter(Boolean).join(" > ");
     });
   }
@@ -360,8 +359,23 @@ function getFolderNameFromEntry(file) {
   return seg.length > 1 ? seg[0] : "Ordner";
 }
 
+function normalizeTopicToken(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase("de");
+}
+
+function pickCanonicalTopic(value, allowedValues = []) {
+  const token = normalizeTopicToken(value);
+  if (!token) return "";
+  const match = allowedValues.find((entry) => normalizeTopicToken(entry) === token);
+  return match || "";
+}
+
 function parseTopicTree(raw) {
-  const source = typeof raw === "string" ? JSON.parse(raw) : raw;
+  const parseInput = typeof raw === "string" ? raw.replace(/^\uFEFF/, "") : raw;
+  const source = typeof parseInput === "string" ? JSON.parse(parseInput) : parseInput;
   const superTopics = [];
   const allSubTopics = new Set();
   const subTopicsBySuper = {};
@@ -414,7 +428,9 @@ function parseTopicTree(raw) {
 
   const roots = Array.isArray(source?.superTopics)
     ? source.superTopics
-    : (Array.isArray(source?.topics) ? source.topics : source);
+    : Array.isArray(source?.super_topics)
+      ? source.super_topics
+      : (Array.isArray(source?.topics) ? source.topics : source);
   walk(roots, "");
 
   return {

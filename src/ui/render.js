@@ -226,44 +226,18 @@ function createImageEditor(question) {
   return wrap;
 }
 
-function createSuggestionDropdown(input, getOptions, onChoose) {
-  const wrap = input.closest("label");
-  if (!wrap) return;
-
-  const dropdown = document.createElement("div");
-  dropdown.className = "editorTopicDropdown";
-  dropdown.hidden = true;
-  wrap.appendChild(dropdown);
-
-  const renderOptions = () => {
-    const options = getOptions(input.value);
-    if (!options.length) {
-      dropdown.hidden = true;
-      dropdown.innerHTML = "";
-      return;
-    }
-
-    dropdown.innerHTML = "";
-    options.slice(0, 10).forEach((opt) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "editorTopicDropdown__item";
-      btn.textContent = opt;
-      btn.addEventListener("click", () => {
-        onChoose(opt);
-        dropdown.hidden = true;
-      });
-      dropdown.appendChild(btn);
-    });
-    dropdown.hidden = false;
-  };
-
-  input.addEventListener("focus", renderOptions);
-  input.addEventListener("input", renderOptions);
-  input.addEventListener("blur", () => {
-    window.setTimeout(() => {
-      dropdown.hidden = true;
-    }, 120);
+function ensureDatalist(id, options = []) {
+  let list = document.getElementById(id);
+  if (!list) {
+    list = document.createElement("datalist");
+    list.id = id;
+    document.body.appendChild(list);
+  }
+  list.innerHTML = "";
+  options.forEach((opt) => {
+    const o = document.createElement("option");
+    o.value = opt;
+    list.appendChild(o);
   });
 }
 
@@ -278,16 +252,92 @@ function updateTopicHints(question, overInput, underInput) {
   return { over, under };
 }
 
+function normalizeTopicToken(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase("de");
+}
+
+function buildTopicCanonicalMap(values = []) {
+  const map = new Map();
+  values.forEach((value) => {
+    const token = normalizeTopicToken(value);
+    if (token && !map.has(token)) map.set(token, value);
+  });
+  return map;
+}
+
 function normalizeTopicValue(value, allowedValues = []) {
   const normalized = String(value || "").trim();
   if (!normalized) return "";
-  return allowedValues.includes(normalized) ? normalized : "";
+  const canonicalMap = buildTopicCanonicalMap(allowedValues);
+  return canonicalMap.get(normalizeTopicToken(normalized)) || "";
 }
 
 function filterTopicOptions(options = [], typedValue = "") {
-  const needle = String(typedValue || "").trim().toLocaleLowerCase("de");
+  const needle = normalizeTopicToken(typedValue);
   if (!needle) return options;
-  return options.filter((opt) => String(opt).toLocaleLowerCase("de").includes(needle));
+  return options.filter((opt) => normalizeTopicToken(opt).includes(needle));
+}
+
+function bindTopicAutocomplete(question, superTopicInput, subTopicInput) {
+  const idSuffix = String(question.id || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, "_");
+  const listSuperId = `superTopicOptions_${idSuffix}`;
+  const listSubId = `subTopicOptions_${idSuffix}`;
+  superTopicInput.setAttribute("list", listSuperId);
+  subTopicInput.setAttribute("list", listSubId);
+
+  const refreshSuper = () => {
+    const { over } = updateTopicHints(question, superTopicInput, subTopicInput);
+    ensureDatalist(listSuperId, filterTopicOptions(over, superTopicInput.value));
+  };
+
+  const refreshSub = () => {
+    const { under } = updateTopicHints(question, superTopicInput, subTopicInput);
+    ensureDatalist(listSubId, filterTopicOptions(under, subTopicInput.value));
+  };
+
+  const validateTopics = () => {
+    const { over, under } = updateTopicHints(question, superTopicInput, subTopicInput);
+    const normalizedSuper = normalizeTopicValue(superTopicInput.value, over);
+    if (normalizedSuper !== superTopicInput.value) {
+      superTopicInput.value = normalizedSuper;
+      superTopicInput.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
+    const relevantUnder = normalizedSuper && state.topicCatalog?.subTopicsBySuper?.[normalizedSuper]
+      ? state.topicCatalog.subTopicsBySuper[normalizedSuper]
+      : under;
+    const normalizedSub = normalizeTopicValue(subTopicInput.value, relevantUnder);
+    if (normalizedSub !== subTopicInput.value) {
+      subTopicInput.value = normalizedSub;
+      subTopicInput.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  };
+
+  superTopicInput.addEventListener("focus", refreshSuper);
+  superTopicInput.addEventListener("input", () => {
+    refreshSuper();
+    refreshSub();
+  });
+  subTopicInput.addEventListener("focus", refreshSub);
+  subTopicInput.addEventListener("input", refreshSub);
+
+  superTopicInput.addEventListener("blur", () => {
+    validateTopics();
+    refreshSuper();
+    refreshSub();
+  });
+  subTopicInput.addEventListener("blur", () => {
+    validateTopics();
+    refreshSub();
+  });
+
+  refreshSuper();
+  refreshSub();
 }
 
 export async function renderMain() {
@@ -367,43 +417,7 @@ export async function renderMain() {
       q.topic = [q.superTopic, q.subTopic].filter(Boolean).join(" > ");
     }, "text");
 
-    const applyTopicValue = (input, value) => {
-      input.value = value;
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    };
-
-    createSuggestionDropdown(
-      superTopicInput,
-      (typed) => {
-        const { over } = updateTopicHints(q, superTopicInput, subTopicInput);
-        return filterTopicOptions(over, typed);
-      },
-      (value) => applyTopicValue(superTopicInput, value),
-    );
-
-    createSuggestionDropdown(
-      subTopicInput,
-      (typed) => {
-        const { under } = updateTopicHints(q, superTopicInput, subTopicInput);
-        return filterTopicOptions(under, typed);
-      },
-      (value) => applyTopicValue(subTopicInput, value),
-    );
-
-    const validateTopics = () => {
-      const { over, under } = updateTopicHints(q, superTopicInput, subTopicInput);
-      const normalizedSuper = normalizeTopicValue(superTopicInput.value, over);
-      if (normalizedSuper !== superTopicInput.value) applyTopicValue(superTopicInput, normalizedSuper);
-
-      const relevantUnder = normalizedSuper && state.topicCatalog?.subTopicsBySuper?.[normalizedSuper]
-        ? state.topicCatalog.subTopicsBySuper[normalizedSuper]
-        : under;
-      const normalizedSub = normalizeTopicValue(subTopicInput.value, relevantUnder);
-      if (normalizedSub !== subTopicInput.value) applyTopicValue(subTopicInput, normalizedSub);
-    };
-
-    superTopicInput.addEventListener("blur", validateTopics);
-    subTopicInput.addEventListener("blur", validateTopics);
+    bindTopicAutocomplete(q, superTopicInput, subTopicInput);
 
     const topicReason = document.createElement("div");
     topicReason.className = "small editorField";
