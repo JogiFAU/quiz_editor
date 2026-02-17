@@ -1,8 +1,8 @@
 {
   "datasets": [
     {
-      "id": "informatik roh",
-      "label": "Informatik (DocsDocs roh)",
+      "id": "informatik",
+      "label": "Informatik",
       "json": [
         "datasets/informatik/export.json"
       ],
@@ -11,10 +11,10 @@
     },
 
     {
-      "id": "MiBi roh",
-      "label": "Mibi (DocsDocs roh)",
+      "id": "MiBi",
+      "label": "Mibi (Praktikum)",
       "json": [
-        "datasets/mibi_prac/export.json"
+        "datasets/mibi_prac/export_AIannotated.json"
       ],
       "zip": "datasets/mibi_prac/images.zip"
 
