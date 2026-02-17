@@ -28,19 +28,23 @@ export function filterByTopics(qs, topicFilters = []) {
 
 
 export function filterByQuality(qs, {
-  topicConfidenceMin = 0,
-  answerConfidenceMin = 0,
-  onlyRecommendChange = false,
-  onlyNeedsMaintenance = false,
+  maintenanceLevels = [],
+  onlyManualEdited = false,
+  onlyManualOverride = false,
 } = {}) {
-  return qs.filter((q) => {
-    const topicConfidence = Number(q.topicConfidence ?? 1);
-    const answerConfidence = Number(q.answerConfidence ?? 1);
+  const levelSet = new Set(maintenanceLevels || []);
 
-    if (topicConfidence > Number(topicConfidenceMin ?? 1)) return false;
-    if (answerConfidence > Number(answerConfidenceMin ?? 1)) return false;
-    if (onlyRecommendChange && !q.recommendChange) return false;
-    if (onlyNeedsMaintenance && !q.needsMaintenance) return false;
+  return qs.filter((q) => {
+    if (levelSet.size && !levelSet.has(q.maintenanceTrafficLevel || "green")) return false;
+    if (onlyManualEdited && !q.manualEdited) return false;
+    if (onlyManualOverride) {
+      const hasOverride = Boolean(
+        q.hasManualMaintenanceOverride
+        || q.hasManualAnswerOverride
+        || q.hasManualTopicOverride,
+      );
+      if (!hasOverride) return false;
+    }
     return true;
   });
 }

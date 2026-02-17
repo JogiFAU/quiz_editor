@@ -54,30 +54,32 @@
 
     <details class="filterGroup" open>
       <summary>Filter: Topics</summary>
-      <div class="small">Themenauswahl + Confidence-Cutoff für die Topic-Einordnung.</div>
+      <div class="small">Themenauswahl für Überthema/Unterthema.</div>
       <div id="topicListSearch" class="examlist"></div>
-      <label for="topicConfidenceMinSearch">Topic-Confidence Cutoff (≤): <span id="topicConfidenceMinValue">1.00</span></label>
-      <div class="row" style="grid-template-columns:1fr 92px;">
-        <input id="topicConfidenceMinSearch" type="range" min="0" max="1" step="0.01" value="1" />
-        <input id="topicConfidenceMinInput" type="number" min="0" max="1" step="0.01" value="1" />
-      </div>
     </details>
 
     <details class="filterGroup" open>
-      <summary>Filter: Richtigkeit der Antwort</summary>
-      <div class="small">Confidence aus passB, sonst passA.</div>
-      <label for="answerConfidenceMinSearch">Antwort-Confidence Cutoff (≤): <span id="answerConfidenceMinValue">1.00</span></label>
-      <div class="row" style="grid-template-columns:1fr 92px;">
-        <input id="answerConfidenceMinSearch" type="range" min="0" max="1" step="0.01" value="1" />
-        <input id="answerConfidenceMinInput" type="number" min="0" max="1" step="0.01" value="1" />
-      </div>
+      <summary>Filter: Bearbeitungsstatus</summary>
+      <div class="small">Ampelstatus aus AI-Ruleset sowie manuelle Bearbeitungen.</div>
       <label class="checkrow">
-        <input id="onlyRecommendChangeSearch" type="checkbox" />
-        <span>Nur Fragen mit <code>recommendChange: true</code></span>
+        <input type="checkbox" data-maintenance-level="red" />
+        <span>Nur Ampel <strong>Rot</strong> (kritisch)</span>
       </label>
       <label class="checkrow">
-        <input id="onlyNeedsMaintenanceSearch" type="checkbox" />
-        <span>Nur Fragen mit <code>needsMaintenance: true</code> / <code>needsMaintanence: true</code></span>
+        <input type="checkbox" data-maintenance-level="yellow" />
+        <span>Nur Ampel <strong>Gelb</strong> (Wartung empfohlen)</span>
+      </label>
+      <label class="checkrow">
+        <input type="checkbox" data-maintenance-level="green" />
+        <span>Nur Ampel <strong>Grün</strong> (gut)</span>
+      </label>
+      <label class="checkrow">
+        <input id="onlyManualEditedSearch" type="checkbox" />
+        <span>Nur manuell bearbeitete Fragen (<code>manualEdited</code>)</span>
+      </label>
+      <label class="checkrow">
+        <input id="onlyManualOverrideSearch" type="checkbox" />
+        <span>Nur Fragen mit manuellen Overrides (Topic/Lösungshinweis/Maintenance)</span>
       </label>
     </details>
 

@@ -478,6 +478,7 @@ export async function renderMain() {
     h.className = "qhead";
 
     h.innerHTML = `<div class="qhead__id"><strong>ID:</strong> ${q.id}</div>`;
+    h.innerHTML += `<div class="qhead__id"><strong>Ampel:</strong> ${q.maintenanceTrafficLabel || "gut"}</div>`;
     if (q.manualEdited) {
       h.innerHTML += `<div class="qhead__id"><strong>Tag:</strong> manualEdited</div>`;
     }
@@ -522,6 +523,7 @@ export async function renderMain() {
     const superTopicField = addField("Überthema", q.superTopic, (v) => {
       q.superTopic = v;
       q.manualTopicEdited = true;
+      q.hasManualTopicOverride = true;
       q.topic = [q.superTopic, q.subTopic].filter(Boolean).join(" > ");
       updateTopicHints(q, superTopicInput, subTopicInput);
     }, "text");
@@ -530,15 +532,17 @@ export async function renderMain() {
     const subTopicField = addField("Unterthema", q.subTopic, (v) => {
       q.subTopic = v;
       q.manualTopicEdited = true;
+      q.hasManualTopicOverride = true;
       q.topic = [q.superTopic, q.subTopic].filter(Boolean).join(" > ");
     }, "text");
     const subTopicInput = subTopicField.input;
 
     bindTopicAutocomplete(q, superTopicInput, superTopicField.wrap, subTopicInput, subTopicField.wrap);
 
-    addField("Finale Topic-Erklärung", q.topicReason, (v) => q.topicReason = v, "textarea");
+    addField("Finale Topic-Erklärung", q.topicReason, (v) => { q.topicReason = v; q.hasManualTopicOverride = true; }, "textarea");
     addField("Finale Maintenance-Einschätzung", q.finalMaintenanceAssessment, (v) => {
       q.finalMaintenanceAssessment = v;
+      q.hasManualMaintenanceOverride = true;
       const normalized = String(v || "").trim().toLocaleLowerCase("de");
       q.needsReview = /wartung|kritisch|problem|fehler/.test(normalized);
     }, "textarea");
@@ -602,7 +606,7 @@ export async function renderMain() {
 
     card.appendChild(ansWrap);
 
-    addField("Finaler Lösungshinweis", q.answerReason, (v) => q.answerReason = v, "textarea");
+    addField("Finaler Lösungshinweis", q.answerReason, (v) => { q.answerReason = v; q.hasManualAnswerOverride = true; }, "textarea");
 
     card.appendChild(addAnswerBtn);
     card.appendChild(createImageEditor(q, markEdited));

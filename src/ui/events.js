@@ -51,10 +51,9 @@ function defaultSearchConfig() {
   return {
     exams: [],
     topics: [],
-    topicConfidenceMin: 1,
-    answerConfidenceMin: 1,
-    onlyRecommendChange: false,
-    onlyNeedsMaintenance: false,
+    maintenanceLevels: [],
+    onlyManualEdited: false,
+    onlyManualOverride: false,
     imageFilter: "all",
     query: "",
     inAnswers: false,
@@ -65,10 +64,9 @@ function buildSearchConfigFromUi() {
   return {
     exams: selectedExamsFromList(),
     topics: selectedTopicsFromList(),
-    topicConfidenceMin: clampCutoff($("topicConfidenceMinSearch")?.value ?? 1),
-    answerConfidenceMin: clampCutoff($("answerConfidenceMinSearch")?.value ?? 1),
-    onlyRecommendChange: !!$("onlyRecommendChangeSearch")?.checked,
-    onlyNeedsMaintenance: !!$("onlyNeedsMaintenanceSearch")?.checked,
+    maintenanceLevels: Array.from(document.querySelectorAll('input[data-maintenance-level]:checked')).map((x) => x.dataset.maintenanceLevel),
+    onlyManualEdited: !!$("onlyManualEditedSearch")?.checked,
+    onlyManualOverride: !!$("onlyManualOverrideSearch")?.checked,
     imageFilter: $("imageFilterSearch").value,
     query: $("searchText").value,
     inAnswers: $("searchInAnswers").checked,
@@ -80,11 +78,11 @@ function applySearchConfigToUi(config) {
   $("imageFilterSearch").value = cfg.imageFilter || "all";
   $("searchText").value = cfg.query || "";
   $("searchInAnswers").checked = !!cfg.inAnswers;
-  syncConfidenceControl("topic", Number(cfg.topicConfidenceMin ?? 1));
-  syncConfidenceControl("answer", Number(cfg.answerConfidenceMin ?? 1));
-  $("onlyRecommendChangeSearch").checked = !!cfg.onlyRecommendChange;
-  $("onlyNeedsMaintenanceSearch").checked = !!cfg.onlyNeedsMaintenance;
-  updateSliderLabels();
+  document.querySelectorAll('input[data-maintenance-level]').forEach((cb) => {
+    cb.checked = (cfg.maintenanceLevels || []).includes(cb.dataset.maintenanceLevel);
+  });
+  $("onlyManualEditedSearch").checked = !!cfg.onlyManualEdited;
+  $("onlyManualOverrideSearch").checked = !!cfg.onlyManualOverride;
 
   const selectedExams = new Set(cfg.exams || []);
   const examList = $("examListSearch");
@@ -113,10 +111,9 @@ function computeSearchSubset(config) {
   qs = filterByExams(qs, config.exams);
   qs = filterByTopics(qs, config.topics);
   qs = filterByQuality(qs, {
-    topicConfidenceMin: config.topicConfidenceMin,
-    answerConfidenceMin: config.answerConfidenceMin,
-    onlyRecommendChange: config.onlyRecommendChange,
-    onlyNeedsMaintenance: config.onlyNeedsMaintenance,
+    maintenanceLevels: config.maintenanceLevels,
+    onlyManualEdited: config.onlyManualEdited,
+    onlyManualOverride: config.onlyManualOverride,
   });
   qs = filterByImageMode(qs, config.imageFilter);
   return searchQuestions(qs, { query: config.query, inAnswers: config.inAnswers });
@@ -126,41 +123,15 @@ function resetSearchConfig() {
   $("imageFilterSearch").value = "all";
   $("searchText").value = "";
   $("searchInAnswers").checked = false;
-  syncConfidenceControl("topic", 1);
-  syncConfidenceControl("answer", 1);
-  $("onlyRecommendChangeSearch").checked = false;
-  $("onlyNeedsMaintenanceSearch").checked = false;
-  updateSliderLabels();
+  document.querySelectorAll('input[data-maintenance-level]').forEach((cb) => {
+    cb.checked = false;
+  });
+  $("onlyManualEditedSearch").checked = false;
+  $("onlyManualOverrideSearch").checked = false;
   $("pageSize").value = "50";
   $("pageNumber").value = "1";
   $("bulkSearchText").value = "";
   $("bulkReplaceText").value = "";
-}
-
-function clampCutoff(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return 1;
-  return Math.max(0, Math.min(1, n));
-}
-
-function syncConfidenceControl(kind, rawValue, source = "range") {
-  const value = clampCutoff(rawValue);
-  const isTopic = kind === "topic";
-  const rangeEl = $(isTopic ? "topicConfidenceMinSearch" : "answerConfidenceMinSearch");
-  const inputEl = $(isTopic ? "topicConfidenceMinInput" : "answerConfidenceMinInput");
-  const labelEl = $(isTopic ? "topicConfidenceMinValue" : "answerConfidenceMinValue");
-  if (!rangeEl || !inputEl || !labelEl) return value;
-
-  const fixed = value.toFixed(2);
-  if (source !== "range") rangeEl.value = String(value);
-  if (source !== "input") inputEl.value = fixed;
-  labelEl.textContent = fixed;
-  return value;
-}
-
-function updateSliderLabels() {
-  syncConfidenceControl("topic", $("topicConfidenceMinSearch")?.value ?? 1, "range");
-  syncConfidenceControl("answer", $("answerConfidenceMinSearch")?.value ?? 1, "range");
 }
 
 function baseFilenameFromUrl(url) {
@@ -761,7 +732,6 @@ async function pickAndLoadDirectoryLive() {
 }
 
 export function wireUiEvents() {
-  updateSliderLabels();
   const folderInput = $("datasetFolderInput");
   const pickFolderBtn = $("pickFolderBtn");
 
@@ -857,21 +827,20 @@ export function wireUiEvents() {
   });
   ["pageSize", "pageNumber"].forEach((id) => $(id).addEventListener("change", async () => await renderAll()));
 
-  ["imageFilterSearch", "searchText", "searchInAnswers", "topicConfidenceMinSearch", "answerConfidenceMinSearch", "topicConfidenceMinInput", "answerConfidenceMinInput", "onlyRecommendChangeSearch", "onlyNeedsMaintenanceSearch"].forEach((id) => {
+  ["imageFilterSearch", "searchText", "searchInAnswers", "onlyManualEditedSearch", "onlyManualOverrideSearch"].forEach((id) => {
     const el = $(id);
     el.addEventListener(el.tagName === "INPUT" ? "input" : "change", async () => {
-      if (id === "topicConfidenceMinSearch") {
-        syncConfidenceControl("topic", el.value, "range");
-      } else if (id === "answerConfidenceMinSearch") {
-        syncConfidenceControl("answer", el.value, "range");
-      } else if (id === "topicConfidenceMinInput") {
-        syncConfidenceControl("topic", el.value, "input");
-      } else if (id === "answerConfidenceMinInput") {
-        syncConfidenceControl("answer", el.value, "input");
-      } else {
-        updateSliderLabels();
+      if (state.view === "search") {
+        const cfg = buildSearchConfigFromUi();
+        state.searchConfig = cfg;
+        state.searchOrder = computeSearchSubset(cfg).map((q) => q.id);
       }
+      await renderAll();
+    });
+  });
 
+  document.querySelectorAll('input[data-maintenance-level]').forEach((cb) => {
+    cb.addEventListener("change", async () => {
       if (state.view === "search") {
         const cfg = buildSearchConfigFromUi();
         state.searchConfig = cfg;
